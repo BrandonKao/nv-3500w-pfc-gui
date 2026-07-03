@@ -1,0 +1,1572 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>PFC 綜合除錯與監控工作台 Pro v5.9</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-body: #f5f7fa; 
+            --bg-sidebar: #2c3e50;
+            --bg-container: #ffffff; 
+            --bg-gray: #f8f9fa;
+            --text-main: #333333; 
+            --text-muted: #adb5bd; 
+            --border-color: #dee2e6;
+            --table-header: #4b4b4b; 
+            --primary-blue: #007bff;
+            --success-green: #28a745; 
+            --danger-red: #dc3545; 
+            --card-bg: #ffffff;
+            --state-active-bg: #e3f2fd; 
+            --state-active-text: #0d47a1; 
+            --state-active-border: #bbdefb;
+            --fault-active-bg: #ffebee; 
+            --fault-active-text: #b71c1c; 
+            --fault-active-border: #ffcdd2;
+            --sidebar-text: #ffffff;
+            --sidebar-active: #34495e;
+            --log-bg: #2c3e50;
+            --log-text: #ecf0f1;
+        }
+        [data-theme="dark"] {
+            --bg-body: #121212; 
+            --bg-sidebar: #000000;
+            --bg-container: #1e1e1e; 
+            --bg-gray: #2d2d2d;
+            --text-main: #e0e0e0; 
+            --text-muted: #6c757d; 
+            --border-color: #444444;
+            --table-header: #1a1a1a; 
+            --card-bg: #252525;
+            --state-active-bg: #0d47a1; 
+            --state-active-text: #e3f2fd;
+            --fault-active-bg: #b71c1c; 
+            --fault-active-text: #ffebee;
+            --sidebar-active: #222222;
+            --log-bg: #1a1a1a;
+            --log-text: #e0e0e0;
+        }
+
+        body { font-family: 'Segoe UI', -apple-system, sans-serif; margin: 0; padding: 0; background-color: var(--bg-body); color: var(--text-main); transition: 0.2s; display: flex; height: 100vh; overflow: hidden; }
+        
+        /* 側邊導覽列 */
+        .sidebar { width: 240px; background: var(--bg-sidebar); color: var(--sidebar-text); display: flex; flex-direction: column; transition: 0.2s; z-index: 100; }
+        .sidebar-brand { padding: 20px; font-size: 18px; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        .sidebar-menu { list-style: none; padding: 0; margin: 0; flex-grow: 1; }
+        .sidebar-item { padding: 15px 20px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: 0.2s; font-weight: 500; }
+        .sidebar-item:hover { background: rgba(255,255,255,0.05); }
+        .sidebar-item.active { background: var(--sidebar-active); font-weight: bold; border-left: 4px solid var(--primary-blue); }
+        
+        /* 主工作區架構改為彈性垂直排列，容納底部Console */
+        .main-content { flex-grow: 1; display: flex; flex-direction: column; height: 100vh; overflow: hidden; position: relative; }
+        
+        /* 頂部共用工具列 */
+        .global-top-bar { display: flex; align-items: center; justify-content: space-between; padding: 15px 25px; background: var(--bg-container); border-bottom: 1px solid var(--border-color); box-shadow: 0 2px 5px rgba(0,0,0,0.05); flex-shrink: 0; }
+        .connection-panel { display: flex; align-items: center; gap: 15px; }
+        .right-tools { display: flex; align-items: center; gap: 15px; }
+
+        .health-monitor { display: flex; align-items: center; gap: 10px; background: var(--bg-gray); padding: 5px 15px; border-radius: 20px; font-weight: bold; border: 1px solid var(--border-color); min-width: 110px; justify-content: center;}
+        .led { width: 12px; height: 12px; border-radius: 50%; background: #999; }
+        .led-online { background: #2ecc71; box-shadow: 0 0 10px #2ecc71; }
+        .led-offline { background: #e74c3c; box-shadow: 0 0 10px #e74c3c; }
+        
+        /* 頁面分頁容器 */
+        .page-body { flex-grow: 1; padding: 20px; overflow-y: auto; }
+        .page-content { display: none; max-width: 1600px; margin: auto; }
+        .page-content.active { display: block; }
+
+        /* 元件與按鈕樣式 */
+        .card { background: var(--card-bg); padding: 20px; border-radius: 8px; border: 1px solid var(--border-color); box-shadow: 0 4px 6px rgba(0,0,0,0.02); margin-bottom: 20px; }
+        h2 { margin-top: 0; color: var(--text-main); border-bottom: 2px solid var(--border-color); padding-bottom: 10px; margin-bottom: 15px;}
+        .controls { display: flex; align-items: center; gap: 12px; margin-bottom: 15px; padding: 12px; background: var(--bg-gray); border-radius: 8px; border: 1px solid var(--border-color); }
+        
+        button { padding: 8px 16px; cursor: pointer; border: none; border-radius: 6px; font-weight: 600; transition: 0.2s; }
+        button:disabled { background-color: var(--text-muted) !important; cursor: not-allowed; opacity: 0.6; }
+        .btn-green { background: var(--success-green); color: white; }
+        .btn-red { background: var(--danger-red); color: white; }
+        .btn-purple { background: #6c5ce7; color: white; }
+        .btn-blue { background: var(--primary-blue); color: white; }
+        .btn-orange { background: #e67e22; color: white; }
+        
+        .theme-toggle { padding: 6px 12px; cursor: pointer; border-radius: 20px; border: 1px solid var(--border-color); background: var(--bg-gray); color: var(--text-main); font-size: 12px; font-weight: bold; }
+
+        /* 監控表格樣式 */
+        table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 13px; }
+        th { background: var(--table-header); color: white; padding: 8px; position: sticky; top: 0; }
+        td { padding: 10px; text-align: center; border: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-main); }
+        .val-highlight { font-family: 'Consolas', monospace; font-size: 1.2em; font-weight: bold; color: var(--primary-blue); }
+
+        /* 監控圖表排版 */
+        .chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(450px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .chart-container { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px; height: 230px; }
+
+        /* 旗標排版 */
+        .flags-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 15px; }
+        .flag-box { border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; background: var(--card-bg); }
+        .flag-header { padding: 8px 15px; color: white; font-weight: bold; display: flex; justify-content: space-between; font-size: 14px; }
+        .flag-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 5px; padding: 10px; font-size: 11px; }
+        .flag-item { padding: 4px 8px; background: var(--bg-gray); border-radius: 4px; color: var(--text-muted); border: 1px solid var(--border-color); text-align: center; }
+        .active-state { background: var(--state-active-bg) !important; color: var(--state-active-text) !important; border-color: var(--state-active-border) !important; font-weight: bold; }
+        .active-fault { background: var(--fault-active-bg) !important; color: var(--fault-active-text) !important; border-color: var(--fault-active-border) !important; font-weight: bold; }
+
+        /* DAC 與校正排版 */
+        .dac-layout { display: flex; gap: 20px; width: 100%; align-items: flex-start; }
+        .dac-left { flex: 1; min-width: 450px; display: flex; flex-direction: column; gap: 20px; }
+        .dac-right { flex: 1; min-width: 450px; background: var(--card-bg); padding: 20px; border-radius: 8px; border: 1px solid var(--border-color); box-shadow: 0 4px 6px rgba(0,0,0,0.02); margin-bottom: 20px; }
+        .control-group { display: flex; align-items: center; gap: 15px; margin-bottom: 15px; }
+        .control-group label { font-weight: bold; min-width: 100px; }
+        .control-group select, .control-group input { padding: 8px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-gray); color: var(--text-main); flex-grow: 1; font-family: monospace; }
+        
+        /* 校正格點排版 */
+        .cal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 15px; }
+        .cal-item { background: var(--bg-gray); border: 1px solid var(--border-color); border-radius: 6px; padding: 12px; display: flex; flex-direction: column; justify-content: space-between; gap: 8px; }
+        .cal-title { font-weight: bold; font-size: 13px; color: var(--text-main); }
+        .cal-row { display: flex; gap: 10px; align-items: center; width: 100%; }
+        .cal-row input { padding: 6px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-main); font-family: monospace; flex-grow: 1; min-width: 60px; }
+        .cal-item button { width: 100%; padding: 6px; font-size: 13px; }
+
+        /* 唯讀校正資料面版樣式 */
+        .read-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 15px; }
+        .read-item { background: var(--bg-gray); border: 1px solid var(--border-color); border-radius: 6px; padding: 12px; font-size: 14px;}
+        .read-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px dashed var(--border-color); }
+        .read-row:last-child { border-bottom: none; }
+        .read-label { color: var(--text-muted); font-weight: 500; }
+        .read-val { font-family: 'Consolas', monospace; font-weight: bold; color: var(--primary-blue); }
+        .badge { padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; color: white;}
+        .badge-success { background-color: var(--success-green); }
+        .badge-danger { background-color: var(--danger-red); }
+
+
+
+        /* Black Box 數據頁面 */
+        .blackbox-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        .blackbox-result { background: var(--bg-gray); border: 1px solid var(--border-color); border-radius: 8px; padding: 15px; min-height: 220px; }
+        .blackbox-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 15px; }
+        .blackbox-summary-item { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; }
+        .blackbox-table-wrap { overflow-x: auto; border: 1px solid var(--border-color); border-radius: 6px; background: var(--card-bg); }
+        .blackbox-table { width: 100%; border-collapse: collapse; margin: 0; font-size: 13px; }
+        .blackbox-table th { background: var(--table-header); color: white; padding: 9px; text-align: left; position: sticky; top: 0; }
+        .blackbox-table td { padding: 9px; text-align: left; border: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-main); }
+        .blackbox-table .bb-no { width: 70px; text-align: center; font-family: 'Consolas', monospace; font-weight: bold; }
+        .blackbox-table .bb-protection { width: 220px; font-family: 'Consolas', monospace; font-weight: bold; color: var(--danger-red); }
+        .blackbox-table .bb-detail { line-height: 1.5; }
+        .blackbox-empty { color: var(--text-muted); font-weight: bold; text-align: center !important; padding: 18px !important; }
+        .blackbox-raw { margin-top: 15px; padding: 10px; background: var(--card-bg); border: 1px dashed var(--border-color); border-radius: 6px; font-family: 'Consolas', monospace; font-size: 12px; word-break: break-all; color: var(--text-muted); }
+
+        /* 全局底部共用主控台 (Console) */
+        .global-console-panel { height: 200px; background-color: var(--log-bg); color: var(--log-text); border-top: 2px solid var(--border-color); display: flex; flex-direction: column; flex-shrink: 0; transition: 0.2s; z-index: 101;}
+        .console-header { padding: 6px 15px; background: rgba(0, 0, 0, 0.2); font-size: 12px; font-weight: bold; color: var(--sidebar-text); display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        #log { flex-grow: 1; padding: 10px 15px; overflow-y: auto; font-family: 'Courier New', Courier, monospace; font-size: 13px; line-height: 1.4; }
+        .enum-name { font-family: monospace; color: #c7254e; background-color: rgba(199,37,78,0.1); padding: 2px 4px; border-radius: 4px; font-size: 12px; }
+    </style>
+</head>
+<body data-theme="light">
+
+    <div class="sidebar">
+        <div class="sidebar-brand">PFC 綜合除錯工作台</div>
+        <ul class="sidebar-menu">
+            <li class="sidebar-item active" onclick="switchTab('page-monitor', this)">PFC 數據監控</li>
+            <li class="sidebar-item" onclick="switchTab('page-dac', this)">DAC 偵錯設定</li>
+            <li class="sidebar-item" onclick="switchTab('page-readcal', this)">校正數據讀取</li>
+            <li class="sidebar-item" onclick="switchTab('page-cal', this)">PFC 數據校正</li>
+            <li class="sidebar-item" onclick="switchTab('page-blackbox', this)">Black Box數據</li>
+        </ul>
+    </div>
+
+    <div class="main-content">
+        
+        <div class="global-top-bar">
+            <div class="connection-panel">
+                <button id="globalConnectBtn" class="btn-green">連接序列埠 (COM)</button>
+                <span id="globalConnectStatus" style="font-weight: bold; color: var(--danger-red);">未連線</span>
+            </div>
+            <div class="right-tools">
+                <div class="health-monitor">
+                    <div id="statusLed" class="led"></div>
+                    <span id="statusText" style="font-size:11px">STANDBY</span>
+                </div>
+                <button class="theme-toggle" id="globalThemeToggle">切換深色模式</button>
+            </div>
+        </div>
+
+        <div class="page-body">
+
+            <div id="page-monitor" class="page-content active">
+                <div class="controls">
+                    <button id="monitorStartBtn" class="btn-green" disabled>START</button>
+                    <button id="monitorStopBtn" class="btn-red" disabled>STOP</button>
+                    <button id="exportBtn" class="btn-purple">Export CSV</button>
+                    <div style="margin-left: auto;">Window: <input type="number" id="timeWindow" value="5" min="1" style="width: 45px; background: var(--bg-body); color: var(--text-main); border: 1px solid var(--border-color); text-align: center;"> sec</div>
+                </div>
+
+                <table>
+                    <thead>
+                        <tr><th>系統狀態機 (SM)</th><th>Vac (V)</th><th>Iac (A)</th><th>Freq (Hz)</th><th>Pin (W)</th><th>Vbus (V)</th><th>Pout (W)</th><th>PFC Temp</th><th>LLC Temp</th><th>AMB Temp</th><th>FW</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><span id="val-sm" style="color:#6f42c1; font-weight:bold;">--</span></td>
+                            <td id="val-vac" class="val-highlight">--</td><td id="val-iac" class="val-highlight">--</td><td id="val-freq" class="val-highlight">--</td>
+                            <td id="val-pin" class="val-highlight">--</td><td id="val-vbus" class="val-highlight">--</td><td id="val-pout" class="val-highlight">--</td>
+                            <td id="val-tpfc" class="val-highlight">--</td><td id="val-tllc" class="val-highlight">--</td><td id="val-tamb" class="val-highlight">--</td><td id="val-fw">--</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="chart-grid">
+                    <div class="chart-container"><canvas id="chart-vbus"></canvas></div>
+                    <div class="chart-container"><canvas id="chart-pin"></canvas></div>
+                    <div class="chart-container"><canvas id="chart-pout"></canvas></div>
+                    <div class="chart-container"><canvas id="chart-tpfc"></canvas></div>
+                    <div class="chart-container"><canvas id="chart-tllc"></canvas></div>
+                    <div class="chart-container"><canvas id="chart-tamb"></canvas></div>
+                </div>
+
+                <div class="flags-container">
+                    <div class="flag-box"><div class="flag-header" style="background:#0984e3"><span>STATE FLAGS</span><span id="state-hex">0x00000000</span></div><div id="state-grid" class="flag-grid"></div></div>
+                    <div class="flag-box"><div class="flag-header" style="background:#6c5ce7"><span>CBC TRIGGER FLAGS</span><span id="cbc-hex">0x00</span></div><div id="cbc-grid" class="flag-grid"></div></div>
+                    <div class="flag-box"><div class="flag-header" style="background:#d63031"><span>FAULT FLAGS</span><span id="fault-hex">0x00000000</span></div><div id="fault-grid" class="flag-grid"></div></div>
+                </div>
+            </div>
+
+            <div id="page-dac" class="page-content">
+                <div class="dac-layout">
+                    <div class="dac-left">
+                        <div class="card">
+                            <h2>DAC 輸出通道設定</h2>
+                            <div class="control-group">
+                                <label>DAC_A Port:</label>
+                                <select id="dacA_select"></select>
+                                <button id="dacA_btn" class="btn-blue" disabled>寫入 A 通道</button>
+                            </div>
+                            <div class="control-group">
+                                <label>DAC_B Port:</label>
+                                <select id="dacB_select"></select>
+                                <button id="dacB_btn" class="btn-blue" disabled>寫入 B 通道</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="dac-right">
+                        <h2>參數定義對照表 (Enum Map)</h2>
+                        <table style="margin-bottom: 0;">
+                            <thead>
+                                <tr>
+                                    <th style="width: 15%; text-align: left;">Hex</th>
+                                    <th style="width: 45%; text-align: left;">Enum 變數名稱</th>
+                                    <th style="width: 40%; text-align: left;">參數說明</th>
+                                </tr>
+                            </thead>
+                        </table>
+                        <div style="max-height: 400px; overflow-y: auto; border: 1px solid var(--border-color); border-top: none;">
+                            <table style="margin-bottom: 0;">
+                                <tbody id="paramTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="page-readcal" class="page-content">
+                <div class="card">
+                    <h2>MCU 內部儲存校正數據讀取 (Verification Worktable)</h2>
+                    <div class="controls" style="margin-bottom: 20px;">
+                        <button id="readCalBtn" class="btn-green" disabled style="padding: 10px 24px;">讀取校正參數封包</button>
+                        <div id="readCalStatus" style="margin-left: 15px; font-weight: bold; font-size:14px; color: var(--text-muted)">等待執行讀取命令...</div>
+                    </div>
+
+                    <div class="read-grid">
+                        <div class="read-item">
+                            <h3 style="margin-top: 0; color: var(--primary-blue); border-bottom: 1px solid var(--border-color); padding-bottom:5px;">系統基本設定 (sys_info)</h3>
+                            <div class="read-row"><span class="read-label">客戶名稱:</span><span class="read-val" id="rc_cust">--</span></div>
+                            <div class="read-row"><span class="read-label">模組型號:</span><span class="read-val" id="rc_mod">--</span></div>
+                            <div class="read-row"><span class="read-label">生產日期:</span><span class="read-val" id="rc_date">--</span></div>
+                            <div class="read-row"><span class="read-label">產品序號:</span><span class="read-val" id="rc_sn">--</span></div>
+                            <div class="read-row"><span class="read-label">額定功率:</span><span class="read-val" id="rc_power">-- W</span></div>
+                        </div>
+
+                        <div class="read-item">
+                            <h3 style="margin-top: 0; color: var(--primary-blue); border-bottom: 1px solid var(--border-color); padding-bottom:5px;">校正封包旗標狀態 (cali_info)</h3>
+                            <div class="read-row"><span class="read-label">校正旗標 Key:</span><span id="rc_key" class="read-val">--</span></div>
+                            <div class="read-row"><span class="read-label">校正狀態結果:</span><span id="rc_status_badge">--</span></div>
+                            <div class="read-row"><span class="read-label">資料內文長度:</span><span id="rc_len" class="read-val">-- Bytes</span></div>
+                            <div class="read-row"><span class="read-label">內文 Checksum:</span><span id="rc_crc" class="read-val">--</span></div>
+                        </div>
+
+                        <div class="read-item">
+                            <h3 style="margin-top: 0; color: var(--primary-blue); border-bottom: 1px solid var(--border-color); padding-bottom:5px;">輸入電壓校正點 (input_voltage)</h3>
+                            <div class="read-row"><span class="read-label">0V 計算值 / 真實值:</span><span><span class="read-val" id="rc_v0_c">--</span> / <span class="read-val" id="rc_v0_r">--</span> V</span></div>
+                            <div class="read-row"><span class="read-label">90V 計算值 / 真實值:</span><span><span class="read-val" id="rc_v90_c">--</span> / <span class="read-val" id="rc_v90_r">--</span> V</span></div>
+                            <div class="read-row"><span class="read-label">115V 計算值 / 真實值:</span><span><span class="read-val" id="rc_v115_c">--</span> / <span class="read-val" id="rc_v115_r">--</span> V</span></div>
+                            <div class="read-row"><span class="read-label">230V 計算值 / 真實值:</span><span><span class="read-val" id="rc_v230_c">--</span> / <span class="read-val" id="rc_v230_r">--</span> V</span></div>
+                            <div class="read-row"><span class="read-label">264V 計算值 / 真實值:</span><span><span class="read-val" id="rc_v264_c">--</span> / <span class="read-val" id="rc_v264_r">--</span> V</span></div>
+                        </div>
+
+                        <div class="read-item">
+                            <h3 style="margin-top: 0; color: var(--primary-blue); border-bottom: 1px solid var(--border-color); padding-bottom:5px;">輸入電流校正點 (input_current)</h3>
+                            <div class="read-row"><span class="read-label">0% 負載計算 / 真實:</span><span><span class="read-val" id="rc_i0_c">--</span> / <span class="read-val" id="rc_i0_r">--</span> A</span></div>
+                            <div class="read-row"><span class="read-label">15% 負載計算 / 真實:</span><span><span class="read-val" id="rc_i15_c">--</span> / <span class="read-val" id="rc_i15_r">--</span> A</span></div>
+                            <div class="read-row"><span class="read-label">35% 負載計算 / 真實:</span><span><span class="read-val" id="rc_i35_c">--</span> / <span class="read-val" id="rc_i35_r">--</span> A</span></div>
+                            <div class="read-row"><span class="read-label">70% 負載計算 / 真實:</span><span><span class="read-val" id="rc_i70_c">--</span> / <span class="read-val" id="rc_i70_r">--</span> A</span></div>
+                            <div class="read-row"><span class="read-label">100% 負載計算 / 真實:</span><span><span class="read-val" id="rc_i100_c">--</span> / <span class="read-val" id="rc_i100_r">--</span> A</span></div>
+                        </div>
+
+                        <div class="read-item">
+                            <h3 style="margin-top: 0; color: var(--primary-blue); border-bottom: 1px solid var(--border-color); padding-bottom:5px;">雙電壓 VBUS 曲線與 XCAP 增益</h3>
+                            <div class="read-row"><span class="read-label">Low Line VBUS (2% / 10%):</span><span><span class="read-val" id="rc_lv_2">--</span> / <span class="read-val" id="rc_lv_10">--</span> V</span></div>
+                            <div class="read-row"><span class="read-label">Low Line VBUS (50% / 100%):</span><span><span class="read-val" id="rc_lv_50">--</span> / <span class="read-val" id="rc_lv_100">--</span> V</span></div>
+                            <div class="read-row"><span class="read-label">High Line VBUS (2% / 10%):</span><span><span class="read-val" id="rc_hv_2">--</span> / <span class="read-val" id="rc_hv_10">--</span> V</span></div>
+                            <div class="read-row"><span class="read-label">High Line VBUS (50% / 100%):</span><span><span class="read-val" id="rc_hv_50">--</span> / <span class="read-val" id="rc_hv_100">--</span> V</span></div>
+                            <div class="read-row"><span class="read-label">XCAP 補償增益 (Low / High):</span><span><span class="read-val" id="rc_xc_l">--</span> / <span class="read-val" id="rc_xc_h">--</span> A</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="page-cal" class="page-content">
+                <div class="card">
+                    <h2>PFC 參數與增益校正 (手動控制工作台)</h2>
+                    <div class="cal-grid">
+                        <div class="cal-item"><div class="cal-title">步驟 1: 解除校正鎖定 (UNLOCK)</div><button class="btn-red cal-action-btn" onclick="execCalStep(1)" disabled>執行 UNLOCK</button></div>
+                        <div class="cal-item"><div class="cal-title">步驟 2: 清除所有校正數據 (CLEAR)</div><button class="btn-red cal-action-btn" onclick="execCalStep(2)" disabled>執行 CLEAR ALL</button></div>
+                        <div class="cal-item">
+                            <div class="cal-title">步驟 3: 設定額定功率 (POWER RATE)</div>
+                            <div class="cal-row"><label>瓦數(W):</label><input type="number" id="cal_p3_watt" value="1800"></div>
+                            <button class="btn-blue cal-action-btn" onclick="execCalStep(3)" disabled>寫入功率</button>
+                        </div>
+                        <div class="cal-item">
+                            <div class="cal-title">步驟 4: 設定產品序號 (SERIAL NUMBER)</div>
+                            <div class="cal-row"><label>序號:</label><input type="text" id="cal_p4_sn" value="SN123456789SN" maxlength="16"></div>
+                            <button class="btn-blue cal-action-btn" onclick="execCalStep(4)" disabled>寫入序號</button>
+                        </div>
+                        <div class="cal-item">
+                            <div class="cal-title">步驟 5: 設定生產日期 (PRODUCTION DATE)</div>
+                            <div class="cal-row"><label>日期:</label><input type="text" id="cal_p5_date" value="2026-04-01" maxlength="16"></div>
+                            <button class="btn-blue cal-action-btn" onclick="execCalStep(5)" disabled>寫入生產日期</button>
+                        </div>
+                        <div class="cal-item">
+                            <div class="cal-title">步驟 6: 設定模組名稱 (MODULE NAME)</div>
+                            <div class="cal-row"><label>名稱:</label><input type="text" id="cal_p6_name" value="GPS-3500AB A" maxlength="16"></div>
+                            <button class="btn-blue cal-action-btn" onclick="execCalStep(6)" disabled>寫入模組名稱</button>
+                        </div>
+                        <div class="cal-item">
+                            <div class="cal-title">步驟 7: 設定客戶名稱 (CUSTOMER NAME)</div>
+                            <div class="cal-row"><label>客戶:</label><input type="text" id="cal_p7_cust" value="NVIDIA" maxlength="16"></div>
+                            <button class="btn-blue cal-action-btn" onclick="execCalStep(7)" disabled>寫入客戶名稱</button>
+                        </div>
+
+                        <div class="cal-item"><div class="cal-title">步驟 8: 校正 90Vac 電壓點</div><button class="btn-orange cal-action-btn" onclick="execCalStep(8)" disabled>執行 90Vac 校正</button></div>
+                        <div class="cal-item"><div class="cal-title">步驟 9: 校正 115Vac 電壓點</div><button class="btn-orange cal-action-btn" onclick="execCalStep(9)" disabled>執行 115Vac 校正</button></div>
+                        <div class="cal-item"><div class="cal-title">步驟 10: 校正 230Vac 電壓點</div><button class="btn-orange cal-action-btn" onclick="execCalStep(10)" disabled>執行 230Vac 校正</button></div>
+                        <div class="cal-item"><div class="cal-title">步驟 11: 校正 264Vac 電壓點</div><button class="btn-orange cal-action-btn" onclick="execCalStep(11)" disabled>執行 264Vac 校正</button></div>
+
+                        <div class="cal-item">
+                            <div class="cal-title">步驟 12: 校正 Iac 於 15% 負載點</div>
+                            <div class="cal-row"><label>電流(A):</label><input type="number" id="cal_p12_iac" value="2.35" step="0.01"></div>
+                            <button class="btn-blue cal-action-btn" onclick="execCalStep(12)" disabled>校正 Iac 15%</button>
+                        </div>
+                        <div class="cal-item">
+                            <div class="cal-title">步驟 13: 校正 Iac 於 35% 負載點</div>
+                            <div class="cal-row"><label>電流(A):</label><input type="number" id="cal_p13_iac" value="5.48" step="0.01"></div>
+                            <button class="btn-blue cal-action-btn" onclick="execCalStep(13)" disabled>校正 Iac 35%</button>
+                        </div>
+                        <div class="cal-item">
+                            <div class="cal-title">步驟 14: 校正 Iac 於 70% 負載點</div>
+                            <div class="cal-row"><label>電流(A):</label><input type="number" id="cal_p14_iac" value="10.96" step="0.01"></div>
+                            <button class="btn-blue cal-action-btn" onclick="execCalStep(14)" disabled>校正 Iac 70%</button>
+                        </div>
+                        <div class="cal-item">
+                            <div class="cal-title">步驟 15: 校正 Iac 於 100% 負載點</div>
+                            <div class="cal-row"><label>電流(A):</label><input type="number" id="cal_p15_iac" value="15.65" step="0.01"></div>
+                            <button class="btn-blue cal-action-btn" onclick="execCalStep(15)" disabled>校正 Iac 100%</button>
+                        </div>
+
+                        <div class="cal-item">
+                            <div class="cal-title">步驟 16: 校正 XCAP 於 115Vac/10%</div>
+                            <div class="cal-row"><label>電流(A):</label><input type="number" id="cal_p16_xcap" value="1.57" step="0.001"></div>
+                            <button class="btn-blue cal-action-btn" onclick="execCalStep(16)" disabled>校正 XCAP (115V)</button>
+                        </div>
+                        <div class="cal-item">
+                            <div class="cal-title">步驟 17: 校正 XCAP 於 230Vac/10%</div>
+                            <div class="cal-row"><label>電流(A):</label><input type="number" id="cal_p17_xcap" value="0.783" step="0.001"></div>
+                            <button class="btn-blue cal-action-btn" onclick="execCalStep(17)" disabled>校正 XCAP (230V)</button>
+                        </div>
+
+                        <div class="cal-item">
+                            <div class="cal-title">步驟 18~25: VBUS 自動校正</div>
+                            <div id="vbusCounterText" style="font-size: 11px; color: var(--text-muted); margin-bottom: 2px;">當前手動點擊進度: 0 / 8</div>
+                            <button class="btn-green cal-action-btn" id="vbusManualBtn" onclick="execVbusManualClickCal()" disabled>發送 VBUS 校正命令</button>
+                        </div>
+
+                        <div class="cal-item"><div class="cal-title">步驟 26: 編譯並儲存校正數據 (SAVE)</div><button class="btn-purple cal-action-btn" onclick="execCalStep(26)" disabled>編譯並寫入 Flash</button></div>
+                        <div class="cal-item"><div class="cal-title">步驟 27: 重新鎖定校正 (LOCK)</div><button class="btn-green cal-action-btn" onclick="execCalStep(27)" disabled>寫入 LOCK 鎖定</button></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="page-blackbox" class="page-content">
+                <div class="card">
+                    <h2>Black Box 數據</h2>
+                    <div class="controls blackbox-actions" style="margin-bottom: 20px;">
+                        <button id="readBlackBoxBtn" class="btn-green" disabled style="padding: 10px 24px;">讀取 black box 數據</button>
+                        <button id="clearBlackBoxBtn" class="btn-red" disabled style="padding: 10px 24px;">清除 black box 數據</button>
+                        <div id="blackBoxStatus" style="margin-left: 15px; font-weight: bold; font-size:14px; color: var(--text-muted)">等待執行 Black Box 命令...</div>
+                    </div>
+
+                    <div class="blackbox-result">
+                        <div class="blackbox-summary">
+                            <div class="blackbox-summary-item">
+                                <div class="read-label">資料筆數</div>
+                                <div class="read-val" id="bb_record_count">--</div>
+                            </div>
+                            <div class="blackbox-summary-item">
+                                <div class="read-label">有效錯誤項目</div>
+                                <div class="read-val" id="bb_error_count">--</div>
+                            </div>
+                            <div class="blackbox-summary-item">
+                                <div class="read-label">回傳長度欄位</div>
+                                <div class="read-val" id="bb_len">--</div>
+                            </div>
+                            <div class="blackbox-summary-item">
+                                <div class="read-label">PEC 狀態</div>
+                                <div class="read-val" id="bb_pec">--</div>
+                            </div>
+                        </div>
+                        <h3 style="margin-top: 0; color: var(--primary-blue); border-bottom: 1px solid var(--border-color); padding-bottom:5px;">錯誤碼紀錄</h3>
+                        <div class="blackbox-table-wrap">
+                            <table class="blackbox-table">
+                                <thead>
+                                    <tr>
+                                        <th class="bb-no">No.</th>
+                                        <th class="bb-protection">Protection</th>
+                                        <th class="bb-detail">Detail</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="blackBoxTableBody">
+                                    <tr><td colspan="3" class="blackbox-empty">尚未讀取資料</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div id="blackBoxRaw" class="blackbox-raw">RAW: --</div>
+                    </div>
+                </div>
+            </div>
+
+
+        </div>
+
+        <div class="global-console-panel">
+            <div class="console-header">
+                <span>工作台通訊主控台 (CONSOLE LOG)</span>
+                <button onclick="document.getElementById('log').innerHTML=''" style="padding: 2px 8px; font-size: 11px; background: rgba(255,255,255,0.2); color:white; border-radius:3px;">清除 Console</button>
+            </div>
+            <div id="log"></div>
+        </div>
+
+    </div>
+
+<script>
+    // --- 基礎資料定義 ---
+    // bit 0~20：一般系統狀態，維持顯示於 STATE FLAGS
+    const STATE_FIELDS = ["il_bias_cal_done", "ps_on_off", "relay_ready_flag", "watch_dog_occur", "burst_mode", "peak_load_mode", "dynamic_mode", "dcm_mode", "interleaving_mode", "phase_shedding_mode", "ac_input", "input_polarity", "ultra_high_input", "high_line_input", "surge_detect", "input_loss", "input_recovery", "cbc_latched", "cbc_recovery", "en_fast_switch", "bus_ok_info"];
+
+    // bit 21~28：CBC/Analog Watchdog/Comparator 觸發旗標，獨立顯示於 CBC TRIGGER FLAGS
+    const CBC_TRIGGER_FIELDS = [
+        { bit: 21, name: "cbc_awdt_ila_trig", desc: "ILA Analog Watchdog" },
+        { bit: 22, name: "cbc_awdt_ilb_trig", desc: "ILB Analog Watchdog" },
+        { bit: 23, name: "cbc_awdt_vacl_trig", desc: "VACL Analog Watchdog" },
+        { bit: 24, name: "cbc_awdt_vacn_trig", desc: "VACN Analog Watchdog" },
+        { bit: 25, name: "cbc_awdt_vbus_trig", desc: "VBUS Analog Watchdog" },
+        { bit: 26, name: "cbc_comp_ila_trig", desc: "ILA Comparator" },
+        { bit: 27, name: "cbc_comp_ilb_trig", desc: "ILB Comparator" },
+        { bit: 28, name: "cbc_comp_vbus_trig", desc: "VBUS Comparator" }
+    ];
+    const FAULT_FIELDS = ["watch_dog_err", "nmi_err", "hard_fault_err", "mem_manage_err", "bus_fault_err", "usage_fault_err", "hw_err", "input_ovp", "input_uvp", "input_ocp", "ac_freq_err", "vbus_ovp", "vbus_fast_ovp", "vbus_uvp", "vbus_short", "il_a_cbc", "il_b_cbc", "pfc_otp", "llc_otp", "amb_otp", "ps_on_off"];
+    const BLACKBOX_FAULT_FIELDS = [
+        "watch_dog_err", "nmi_err", "hard_fault_err", "mem_manage_err", "bus_fault_err", "usage_fault_err", "hw_err",
+        "input_ovp", "input_uvp", "input_ocp", "ac_freq_err", "vbus_ovp", "vbus_fast_ovp", "vbus_uvp", "vbus_short",
+        "il_a_cbc", "il_b_cbc", "pfc_otp", "llc_otp", "amb_otp", "ps_on_off",
+        "reserve_21", "reserve_22", "reserve_23", "reserve_24", "reserve_25", "reserve_26", "reserve_27", "reserve_28", "reserve_29", "reserve_30", "reserve_31"
+    ];
+    const BLACKBOX_FAULT_DETAILS = {
+        watch_dog_err: "MCU系統當機，觸發看門狗計時器",
+        nmi_err: "MCU系統時脈失效",
+        hard_fault_err: "MCU系統硬體故障",
+        mem_manage_err: "MCU系統存取受保護或未經授權的記憶體區段",
+        bus_fault_err: "MCU系統匯流排通訊失敗",
+        usage_fault_err: "MCU系統邏輯錯誤觸發",
+        hw_err: "電感電流零準位校正失敗",
+        input_ovp: "輸入過電壓保護，軟體觸發",
+        input_uvp: "輸入欠電壓保護，軟體觸發",
+        input_ocp: "輸入過電流保護，軟體觸發",
+        ac_freq_err: "輸入交流頻率異常，軟體觸發",
+        vbus_ovp: "PFC 輸出BUS電壓過高，軟體觸發",
+        vbus_fast_ovp: "輸出BUS電壓突波超壓，硬體觸發",
+        vbus_uvp: "輸出BUS電壓過低，軟體觸發",
+        vbus_short: "輸出BUS電壓短路狀態，軟體觸發",
+        il_a_cbc: "A 相 PFC 電感電流的逐週期保護，硬體觸發",
+        il_b_cbc: "B 相 PFC 電感電流的逐週期保護，硬體觸發",
+        pfc_otp: "PFC MOSFET過溫保護",
+        llc_otp: "LLC MOSFET過溫保護",
+        amb_otp: "PFC 環溫過溫保護",
+        ps_on_off: "系統關閉保護"
+    };
+
+    const SM_MAP = {0: "INITIAL", 1: "RELAY_ON", 2: "SOFT_START", 3: "RUN", 4: "OFF", 5: "DEBUG"};
+    const DACCommandData = [
+        { name: "CMD_PFC_CurRef", desc: "輸入電流目標值, Iref" }, { name: "CMD_PFC_CurRefA", desc: "輸入電壓相位, Vac(t)" }, { name: "CMD_PFC_CurRefB", desc: "電壓環輸出量, Veao" }, { name: "CMD_PFC_CurRefC", desc: "輸入電壓有效值平方倒數, 1/Vac_rms^2" }, { name: "CMD_PFC_CurRefD", desc: "電壓環輸出量_10Hz LPF" }, { name: "CMD_PFC_CurRefE", desc: "電壓環輸出量_50Hz LPF" }, { name: "CMD_PFC_CurRefF", desc: "輸出功率前饋, Pffd" }, { name: "CMD_PFC_CurRefG", desc: "輸出功率前饋_0.5Hz LPF, Pffd_0.5Hz" }, { name: "CMD_PFC_VbusRef", desc: "輸出電壓目標值, Vref" }, { name: "CMD_PFC_IlDuty", desc: "電流環輸出量, Duty_Iref" }, { name: "CMD_PFC_CCMFfd", desc: "CCM模式輸入電壓前饋量, Duty_ffd_ccm" }, { name: "CMD_PFC_DCMFfd", desc: "DCM模式輸入電壓前饋量, Duty_ffd_dcm" }, { name: "CMD_PFC_Duty", desc: "PFC總輸出duty, Duty = Duty_ffd_ccm + Duty_Iref" }, { name: "CMD_PFC_Freq", desc: "PFC主開關頻率, fs" },
+        { name: "CMD_VBUS_raw", desc: "VBUS ADC值, Vbus_adc" }, { name: "CMD_IL_A_raw", desc: "ILA ADC值, Vila_adc" }, { name: "CMD_IL_B_raw", desc: "ILB ADC值, Vilb_adc" }, { name: "CMD_VAC_L_raw", desc: "VLB- ADC值, Vlb-_adc" }, { name: "CMD_VAC_N_raw", desc: "VNB- ADC值, Vnb-_adc" }, { name: "CMD_VBUS_lp_flt", desc: "VBUS 1.444kHz LPF ADC值, Vbus_1444Hz_adc" }, { name: "CMD_VBUS_nc_flt", desc: "VBUS NOTCH LPF ADC值, Vbus_notch_adc" }, { name: "CMD_VAC_abs_flt", desc: "|VAC| ADC值, |Vac|" }, { name: "CMD_VAC_pk_flt", desc: "VAC PEAK ADC值, Vac_peak_adc" },
+        { name: "CMD_StateMachine_PFC", desc: "系統狀態機, State Machine" }, { name: "CMD_AC_ZERO_CROSSING_STATE", desc: "VAC零交越狀態, Vac_zero" }
+    ];
+
+    // --- 全局變數 ---
+    let port = null, reader = null, writer = null, keepReading = true;
+    let commandTimer = null, healthTimer = null;
+    let isMonitoring = false; 
+    let buffer = new Uint8Array(0);
+    let rxBuffer = []; 
+    let lastDataTime = 0, csvData = [];
+    let vbusManualClickCount = 0; 
+    const charts = {};
+    const maxValues = {'chart-vbus':10, 'chart-pin':10, 'chart-pout':10, 'chart-tpfc':0, 'chart-tllc':0, 'chart-tamb':0};
+
+    // --- 分頁切換 ---
+    function switchTab(pageId, element) {
+        document.querySelectorAll('.page-content').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+        document.getElementById(pageId).classList.add('active');
+        element.classList.add('active');
+    }
+
+    // --- 實用輔助工具 ---
+    function getFormattedFullTime(date) {
+        const Y = date.getFullYear(), M = String(date.getMonth() + 1).padStart(2, '0'), D = String(date.getDate()).padStart(2, '0');
+        const h = String(date.getHours()).padStart(2, '0'), m = String(date.getMinutes()).padStart(2, '0'), s = String(date.getSeconds()).padStart(2, '0'), ms = String(date.getMilliseconds()).padStart(3, '0');
+        return `${Y}/${M}/${D} ${h}:${m}:${s}.${ms}`;
+    }
+    function getFilenameTimestamp(date) {
+        return `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}_${String(date.getHours()).padStart(2, '0')}${String(date.getMinutes()).padStart(2, '0')}${String(date.getSeconds()).padStart(2, '0')}`;
+    }
+    function getUintValueLE(bytes, offset, length) { let val = 0; for (let i = 0; i < length; i++) val += bytes[offset + i] * Math.pow(256, i); return val; }
+    function getInt16LE(bytes, offset) { let val = bytes[offset] + (bytes[offset + 1] << 8); return (val & 0x8000) ? val - 0x10000 : val; }
+    function bytesToHexStr(arr) { return Array.from(arr).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' '); }
+    
+    // PEC CRC 查表計算
+    function calculatePEC(dataArray) {
+        const u8HiByteCRC = [0x00, 0x70, 0xE0, 0x90, 0xC7, 0xB7, 0x27, 0x57, 0x89, 0xF9, 0x69, 0x19, 0x4E, 0x3E, 0xAE, 0xDE];
+        const u8LowByteCRC = [0x00, 0x07, 0x0E, 0x09, 0x1C, 0x1B, 0x12, 0x15, 0x38, 0x3F, 0x36, 0x31, 0x24, 0x23, 0x2A, 0x2D];
+        let crc = 0x00;
+        for (let i = 0; i < dataArray.length; i++) {
+            let u8Data = dataArray[i] & 0xFF;
+            crc ^= u8Data;
+            let u8HiByte = (crc >> 4) & 0x0F, u8LowByte = crc & 0x0F;
+            crc = u8HiByteCRC[u8HiByte] ^ u8LowByteCRC[u8LowByte];
+        }
+        return crc;
+    }
+
+    // --- 圖表初始化 ---
+    function initCharts() {
+        const config = [
+            { id: 'chart-vbus', label: 'Vbus (V)', color: '#3498db', yMin: 0 },
+            { id: 'chart-pin', label: 'Pin (W)', color: '#2ecc71', yMin: 0 },
+            { id: 'chart-pout', label: 'Pout (W)', color: '#e67e22', yMin: 0 },
+            { id: 'chart-tpfc', label: 'PFC Temp', color: '#e74c3c', yMin: -40 },
+            { id: 'chart-tllc', label: 'LLC Temp', color: '#9b59b6', yMin: -40 },
+            { id: 'chart-tamb', label: 'AMB Temp', color: '#f1c40f', yMin: -40 }
+        ];
+        config.forEach(c => {
+            const ctx = document.getElementById(c.id).getContext('2d');
+            charts[c.id] = new Chart(ctx, {
+                type: 'line',
+                data: { labels: [], datasets: [{ label: c.label, borderColor: c.color, data: [], borderWidth: 1.5, pointRadius: 0 }] },
+                options: { responsive: true, maintainAspectRatio: false, animation: false, scales: { x: { display: false }, y: { min: c.yMin, suggestedMax: c.yMin + 50, ticks: { color: '#333' }, grid: { color: '#dee2e6' } } } }
+            });
+        });
+    }
+
+    // --- UI 框架動態生成 ---
+    const sGrid = document.getElementById('state-grid'), cbcGrid = document.getElementById('cbc-grid'), fGrid = document.getElementById('fault-grid');
+    STATE_FIELDS.forEach((n, i) => sGrid.innerHTML += `<div class="flag-item" id="state-${i}">${n}</div>`);
+    CBC_TRIGGER_FIELDS.forEach(item => cbcGrid.innerHTML += `<div class="flag-item" id="cbc-${item.bit}" title="${item.desc}">${item.name}</div>`);
+    FAULT_FIELDS.forEach((n, i) => fGrid.innerHTML += `<div class="flag-item" id="fault-${i}">${n}</div>`);
+
+    const dacASelect = document.getElementById('dacA_select'), dacBSelect = document.getElementById('dacB_select'), paramTableBody = document.getElementById('paramTableBody');
+    DACCommandData.forEach((item, index) => {
+        const hexStr = `0x${index.toString(16).padStart(2,'0').toUpperCase()}`;
+        dacASelect.add(new Option(`[${hexStr}] ${item.name}`, index));
+        dacBSelect.add(new Option(`[${hexStr}] ${item.name}`, index));
+        paramTableBody.innerHTML += `<tr><td style="font-family: monospace; font-weight: bold; width:15%; text-align: left;">${hexStr}</td><td style="width:45%; text-align: left;"><span class="enum-name">${item.name}</span></td><td style="width:40%; text-align: left;">${item.desc}</td></tr>`;
+    });
+
+    // 統一由全域主控台記錄輸出
+    function log(msg, type = 'info') {
+        const time = new Date().toLocaleTimeString();
+        let color = 'var(--log-text)';
+        if (type === 'tx') color = '#2ecc71';
+        if (type === 'rx') color = '#f1c40f';
+        if (type === 'err') color = '#e74c3c';
+        const logDiv = document.getElementById('log');
+        if(logDiv) {
+            logDiv.innerHTML += `<div style="color: ${color}">[${time}] ${msg}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+    }
+
+    // --- 連線狀態監控與燈號 ---
+    function checkHealth() {
+        const led = document.getElementById('statusLed'), txt = document.getElementById('statusText'), now = Date.now();
+        if (!isMonitoring) {
+            led.className = "led"; txt.innerText = "STANDBY"; txt.style.color = "var(--text-muted)";
+        } else if (now - lastDataTime > 800) {
+            led.className = "led led-offline"; txt.innerText = "OFFLINE"; txt.style.color = "#e74c3c";
+        } else {
+            led.className = "led led-online"; txt.innerText = "ONLINE"; txt.style.color = "#2ecc71";
+        }
+    }
+
+    // --- 通訊數據解包解析 (Data parsing) ---
+    function parseData(data) {
+        if (data[3] !== 0x00) return;
+        lastDataTime = Date.now();
+        
+        const now = new Date();
+        const fullTimeStr = getFormattedFullTime(now);
+        const shortTimeStr = `${now.getHours()}:${now.getMinutes()}:${now.getSeconds()}`;
+
+        const stateVal = getUintValueLE(data, 4, 4);
+        const faultVal = getUintValueLE(data, 8, 4);
+        const smCode = getUintValueLE(data, 12, 2);
+
+        const cbcVal = (stateVal >>> 21) & 0xFF;
+        document.getElementById('state-hex').innerText = '0x' + (stateVal >>> 0).toString(16).toUpperCase().padStart(8, '0');
+        document.getElementById('cbc-hex').innerText = '0x' + cbcVal.toString(16).toUpperCase().padStart(2, '0');
+        document.getElementById('fault-hex').innerText = '0x' + (faultVal >>> 0).toString(16).toUpperCase().padStart(8, '0');
+
+        const vals = {
+            sm: SM_MAP[smCode] || `Unknown`,
+            fw: `${getUintValueLE(data, 14, 2)}.${getUintValueLE(data, 16, 2)}`,
+            vac: (getUintValueLE(data, 18, 2)/100).toFixed(2), iac: (getUintValueLE(data, 20, 2)/100).toFixed(2),
+            freq: (getUintValueLE(data, 22, 2)/100).toFixed(2), pin: (getUintValueLE(data, 24, 2)/10).toFixed(2),
+            vbus: (getUintValueLE(data, 26, 2)/100).toFixed(2), pout: (getUintValueLE(data, 28, 2)/10).toFixed(2),
+            tpfc: (getInt16LE(data, 30)/100).toFixed(2), tllc: (getInt16LE(data, 32)/100).toFixed(2), tamb: (getInt16LE(data, 34)/100).toFixed(2)
+        };
+
+        // 更新數據看板
+        document.getElementById('val-sm').innerText = vals.sm;
+        document.getElementById('val-vac').innerText = vals.vac; document.getElementById('val-iac').innerText = vals.iac;
+        document.getElementById('val-freq').innerText = vals.freq; document.getElementById('val-pin').innerText = vals.pin;
+        document.getElementById('val-vbus').innerText = vals.vbus; document.getElementById('val-pout').innerText = vals.pout;
+        document.getElementById('val-tpfc').innerText = vals.tpfc; document.getElementById('val-tllc').innerText = vals.tllc;
+        document.getElementById('val-tamb').innerText = vals.tamb; document.getElementById('val-fw').innerText = vals.fw;
+
+        STATE_FIELDS.forEach((_, i) => {
+            const el = document.getElementById(`state-${i}`);
+            if ((stateVal >>> i) & 1) el.classList.add('active-state'); else el.classList.remove('active-state');
+        });
+        CBC_TRIGGER_FIELDS.forEach(item => {
+            const el = document.getElementById(`cbc-${item.bit}`);
+            if ((stateVal >>> item.bit) & 1) el.classList.add('active-fault'); else el.classList.remove('active-fault');
+        });
+        FAULT_FIELDS.forEach((_, i) => {
+            const el = document.getElementById(`fault-${i}`);
+            if ((faultVal >> i) & 1) el.classList.add('active-fault'); else el.classList.remove('active-fault');
+        });
+
+        // 更新繪圖
+        const winSize = parseInt(document.getElementById('timeWindow').value) * 50; 
+        const mapping = { 'chart-vbus': vals.vbus, 'chart-pin': vals.pin, 'chart-pout': vals.pout, 'chart-tpfc': vals.tpfc, 'chart-tllc': vals.tllc, 'chart-tamb': vals.tamb };
+        for (let id in charts) {
+            const c = charts[id]; const cur = parseFloat(mapping[id]);
+            c.data.labels.push(shortTimeStr); c.data.datasets[0].data.push(cur);
+            if (cur > maxValues[id]) { maxValues[id] = cur; c.options.scales.y.max = Math.ceil(cur * 1.15); }
+            if (c.data.labels.length > winSize) { c.data.labels.shift(); c.data.datasets[0].data.shift(); }
+            c.update('none');
+        }
+        csvData.push([fullTimeStr, vals.sm, vals.vac, vals.iac, vals.freq, vals.pin, vals.vbus, vals.pout, vals.tpfc, vals.tllc, vals.tamb, "0x"+stateVal.toString(16), "0x"+faultVal.toString(16)]);
+    }
+
+    // --- Web Serial 核心通訊接收 Loop ---
+    async function readLoop() {
+        while (port && port.readable && keepReading) {
+            reader = port.readable.getReader();
+            try {
+                while (true) {
+                    const { value, done } = await reader.read(); if (done) break;
+                    if (value) {
+                        // 1. 給 外部同步調用頁面 用的獨立分流暫存緩衝
+                        for (let b of value) rxBuffer.push(b);
+                        window.dispatchEvent(new CustomEvent('serial-rx'));
+
+                        // 2. 給 數據監控 頁面用的 Streaming 包解析
+                        let n = new Uint8Array(buffer.length + value.length); 
+                        n.set(buffer); n.set(value, buffer.length); buffer = n;
+                        while (buffer.length >= 37) {
+                            if (buffer[0] === 0x61 && buffer[1] === 0x01 && buffer[2] === 0x21) { 
+                                if (isMonitoring) parseData(buffer.slice(0, 37)); 
+                                buffer = buffer.slice(37); 
+                            } else { 
+                                buffer = buffer.slice(1); 
+                            }
+                        }
+                    }
+                }
+            } catch (e) {
+                // 讀取異常中斷處理
+            } finally { if (reader) reader.releaseLock(); }
+        }
+    }
+
+    // 定時發送數據監控命令
+    async function sendMonitorCommand() { 
+        if (port?.writable && writer && isMonitoring) { 
+            try { await writer.write(new Uint8Array([0x61, 0x01, 0x21, 0x5C])); } catch (e) {} 
+        } 
+    }
+
+    // --- 全局共用連線按鈕功能 ---
+    const globalConnectBtn = document.getElementById('globalConnectBtn');
+    const globalConnectStatus = document.getElementById('globalConnectStatus');
+    const dacABtn = document.getElementById('dacA_btn');
+    const dacBBtn = document.getElementById('dacB_btn');
+    const monitorStartBtn = document.getElementById('monitorStartBtn');
+    const monitorStopBtn = document.getElementById('monitorStopBtn');
+    const readCalBtn = document.getElementById('readCalBtn');
+    const readBlackBoxBtn = document.getElementById('readBlackBoxBtn');
+    const clearBlackBoxBtn = document.getElementById('clearBlackBoxBtn');
+
+    globalConnectBtn.onclick = async () => {
+        if (port) {
+            isMonitoring = false;
+            keepReading = false;
+            clearInterval(commandTimer);
+            clearInterval(healthTimer);
+            if (reader) await reader.cancel(); 
+            if (writer) writer.releaseLock();
+            await port.close();
+            
+            port = null;
+            globalConnectStatus.innerText = "未連線";
+            globalConnectStatus.style.color = "var(--danger-red)";
+            globalConnectBtn.innerText = "連接序列埠 (COM)";
+            globalConnectBtn.className = "btn-green";
+            
+            monitorStartBtn.disabled = true;
+            monitorStopBtn.disabled = true;
+            dacABtn.disabled = true;
+            dacBBtn.disabled = true;
+            readCalBtn.disabled = true;
+            readBlackBoxBtn.disabled = true;
+            clearBlackBoxBtn.disabled = true;
+            toggleCalButtons(true); 
+            
+            document.getElementById('statusLed').className = "led"; 
+            document.getElementById('statusText').innerText = "STANDBY";
+            log("序列埠連線已斷開");
+            return;
+        }
+
+        try {
+            port = await navigator.serial.requestPort(); 
+            await port.open({ baudRate: 115200 });
+            writer = port.writable.getWriter(); 
+            keepReading = true;
+
+            globalConnectStatus.innerText = "已連線";
+            globalConnectStatus.style.color = "var(--success-green)";
+            globalConnectBtn.innerText = "斷開序列埠";
+            globalConnectBtn.className = "btn-red";
+
+            monitorStartBtn.disabled = false;
+            monitorStopBtn.disabled = true;
+            dacABtn.disabled = false;
+            dacBBtn.disabled = false;
+            readCalBtn.disabled = false;
+            readBlackBoxBtn.disabled = false;
+            clearBlackBoxBtn.disabled = false;
+            toggleCalButtons(false); 
+
+            healthTimer = setInterval(checkHealth, 500);
+            readLoop();
+            log("成功連接序列埠 (115200 bps)，進入 STANDBY 模式，可切換分頁進行數據校正與除錯。");
+        } catch (e) { 
+            alert("連線失敗: " + e); 
+            log("連線失敗: " + e, 'err');
+        }
+    };
+
+    function toggleCalButtons(disabled) {
+        document.querySelectorAll('.cal-action-btn').forEach(btn => btn.disabled = disabled);
+    }
+
+    // --- 數據監控專屬：START 與 STOP 按鈕邏輯 ---
+    monitorStartBtn.onclick = () => {
+        if (!port) return;
+        isMonitoring = true;
+        lastDataTime = Date.now();
+        commandTimer = setInterval(sendMonitorCommand, 20); 
+        
+        monitorStartBtn.disabled = true;
+        monitorStopBtn.disabled = false;
+        log("數據監控啟動 (START)。");
+    };
+
+    monitorStopBtn.onclick = () => {
+        isMonitoring = false;
+        clearInterval(commandTimer);
+        
+        monitorStartBtn.disabled = false;
+        monitorStopBtn.disabled = true;
+        log("數據監控停止 (STOP)。");
+    };
+
+    // --- CSV 匯出邏輯 ---
+    document.getElementById('exportBtn').onclick = () => {
+        if (csvData.length === 0) { alert("無數據可匯出"); return; }
+        let c = "\uFEFFTime,SM,Vac,Iac,Freq,Pin,Vbus,Pout,Tpfc,Tllc,Tamb,State_Hex,Fault_Hex\n";
+        csvData.forEach(r => c += r.join(",") + "\n");
+        const blob = new Blob([c], {type:'text/csv;charset=utf-8'});
+        const a = document.createElement("a");
+        const ts = getFilenameTimestamp(new Date());
+        a.href = URL.createObjectURL(blob);
+        a.download = `PFC_Log_${ts}.csv`;
+        a.click();
+    };
+
+    // --- 全局指令發送與同步等待回應（支援 DAC / 校正 / 校正讀取） ---
+    function sendAndAwaitCustomResponse(payload, startHeader = 0x60, timeoutMs = 300, minResponseLen = 5) {
+        return new Promise(async (resolve, reject) => {
+            if (!port || !writer) return reject(new Error("序列埠未開啟或未授權"));
+
+            rxBuffer = [];
+
+            const resumeMonitor = isMonitoring;
+            if (isMonitoring) {
+                isMonitoring = false;
+                clearInterval(commandTimer);
+            }
+
+            let settled = false;
+
+            function cleanup() {
+                clearTimeout(timer);
+                window.removeEventListener('serial-rx', onRxEvent);
+                if (resumeMonitor) {
+                    isMonitoring = true;
+                    commandTimer = setInterval(sendMonitorCommand, 20);
+                }
+            }
+
+            function onRxEvent() {
+                // 尋找指定封包頭，避免前面殘留雜訊導致取錯位置
+                while (rxBuffer.length > 0 && rxBuffer[0] !== startHeader) {
+                    rxBuffer.shift();
+                }
+
+                if (rxBuffer.length >= minResponseLen) {
+                    const packet = rxBuffer.slice(0, minResponseLen);
+                    rxBuffer = rxBuffer.slice(minResponseLen);
+
+                    if (!settled) {
+                        settled = true;
+                        cleanup();
+                        resolve(packet);
+                    }
+                }
+            }
+
+            const timer = setTimeout(() => {
+                if (!settled) {
+                    settled = true;
+                    cleanup();
+                    reject(new Error(`回應逾時，已收到 ${rxBuffer.length} / ${minResponseLen} bytes`));
+                }
+            }, timeoutMs);
+
+            // 先掛 listener，再送出命令，避免 MCU 太快回覆時漏接事件
+            window.addEventListener('serial-rx', onRxEvent);
+
+            try {
+                await writer.write(new Uint8Array(payload));
+                log(`發送 (TX): ${bytesToHexStr(payload)}`, 'tx');
+                onRxEvent(); // 若資料在 listener 掛上前已進 rxBuffer，立刻檢查一次
+            } catch (wErr) {
+                if (!settled) {
+                    settled = true;
+                    cleanup();
+                    reject(wErr);
+                }
+            }
+        });
+    }
+
+
+
+    // --- Black Box：變長封包接收 ---
+    // 回傳格式：61 49 LEN STATUS [black box data ...] PEC
+    // LEN = STATUS + black box data bytes，不包含前面 61 49 LEN，也不包含最後 PEC。
+    function sendAndAwaitVariableLengthResponse(payload, header0 = 0x61, header1 = 0x49, timeoutMs = 2500) {
+        return new Promise(async (resolve, reject) => {
+            if (!port || !writer) return reject(new Error("序列埠未開啟或未授權"));
+
+            rxBuffer = [];
+            const resumeMonitor = isMonitoring;
+            if (isMonitoring) {
+                isMonitoring = false;
+                clearInterval(commandTimer);
+            }
+
+            let settled = false;
+            function cleanup() {
+                clearTimeout(timer);
+                window.removeEventListener('serial-rx', onRxEvent);
+                if (resumeMonitor) {
+                    isMonitoring = true;
+                    commandTimer = setInterval(sendMonitorCommand, 20);
+                }
+            }
+
+            function onRxEvent() {
+                while (rxBuffer.length >= 2 && (rxBuffer[0] !== header0 || rxBuffer[1] !== header1)) {
+                    rxBuffer.shift();
+                }
+                if (rxBuffer.length >= 4) {
+                    const lenField = rxBuffer[2];
+                    const totalLen = 3 + lenField + 1;
+                    if (lenField < 1) {
+                        rxBuffer.shift();
+                        return;
+                    }
+                    if (rxBuffer.length >= totalLen) {
+                        const packet = rxBuffer.slice(0, totalLen);
+                        rxBuffer = rxBuffer.slice(totalLen);
+                        if (!settled) {
+                            settled = true;
+                            cleanup();
+                            resolve(packet);
+                        }
+                    }
+                }
+            }
+
+            const timer = setTimeout(() => {
+                if (!settled) {
+                    settled = true;
+                    cleanup();
+                    reject(new Error(`回應逾時，已收到 ${rxBuffer.length} bytes`));
+                }
+            }, timeoutMs);
+
+            window.addEventListener('serial-rx', onRxEvent);
+
+            try {
+                await writer.write(new Uint8Array(payload));
+                log(`發送 (TX): ${bytesToHexStr(payload)}`, 'tx');
+                onRxEvent();
+            } catch (wErr) {
+                if (!settled) {
+                    settled = true;
+                    cleanup();
+                    reject(wErr);
+                }
+            }
+        });
+    }
+
+    // --- DAC 設定處理 ---
+    async function handleDacConfig(cmdTypeHex) {
+        const selectElem = (cmdTypeHex === 0x0A) ? dacASelect : dacBSelect;
+        const portName = (cmdTypeHex === 0x0A) ? "DAC_A Port" : "DAC_B Port";
+        const enumVal = parseInt(selectElem.value, 10);
+        
+        const packetHeader = [0x60, 0xFF, 0x02, cmdTypeHex, enumVal];
+        const pec = calculatePEC(packetHeader);
+        const fullPacket = [...packetHeader, pec];
+
+        dacABtn.disabled = true; dacBBtn.disabled = true;
+        
+        const maxRetries = 25;
+        let success = false;
+        
+        log(`開始設定 ${portName} -> [0x${enumVal.toString(16).toUpperCase()}]...`);
+
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                log(`第 ${attempt} / ${maxRetries} 次嘗試...`);
+                const rxPacket = await sendAndAwaitCustomResponse(fullPacket, 0x60, 300, 5);
+                log(`接收 (RX): ${bytesToHexStr(rxPacket)}`, 'rx');
+                
+                if (rxPacket[0] === 0x60 && rxPacket[1] === 0xFF && rxPacket[2] === 0x01) {
+                    if (rxPacket[3] === 0x00) {
+                        log(`🎉 ${portName} 設定成功！ (於第 ${attempt} 次嘗試)`);
+                        success = true;
+                        break;
+                    } else {
+                        log(`⚠️ 下位機回傳失敗代碼 [01] (Fail)`, 'err');
+                    }
+                } else {
+                    log(`⚠️ 回傳格式不正確`, 'err');
+                }
+            } catch (err) {
+                log(`❌ 錯誤: ${err.message}`, 'err');
+            }
+            if (!success && attempt < maxRetries) {
+                await new Promise(r => setTimeout(r, 50));
+            }
+        }
+
+        if (!success) {
+            log(`🚨 已達最大重試次數 ${maxRetries} 次，設定最終失敗！`, 'err');
+            alert(`${portName} 設定失敗，請檢查硬體狀態。`);
+        }
+
+        dacABtn.disabled = false; dacBBtn.disabled = false;
+    }
+
+    dacABtn.addEventListener('click', () => handleDacConfig(0x0A));
+    dacBBtn.addEventListener('click', () => handleDacConfig(0x0B));
+
+
+    // --- 校正數據讀取與 IEEE-754 記憶體解包邏輯 ---
+    function parseAsciiString(uint8Arr, start, length) {
+        let str = "";
+        for (let i = start; i < start + length; i++) {
+            if (uint8Arr[i] === 0x00) break;
+            str += String.fromCharCode(uint8Arr[i]);
+        }
+        return str.trim();
+    }
+
+    function parseFloat32LE(uint8Arr, offset) {
+        // 修正 1：確保轉換為 TypedArray 以獲取 .buffer
+        const slice = new Uint8Array(uint8Arr.slice(offset, offset + 4));
+        const view = new DataView(slice.buffer);
+        return view.getFloat32(0, true); 
+    }
+
+    readCalBtn.onclick = async () => {
+        readCalBtn.disabled = true;
+        const statusText = document.getElementById('readCalStatus');
+        statusText.innerText = "正在執行校正數據讀取與校驗流程...";
+        statusText.style.color = "var(--primary-blue)";
+
+        const readPacket = [0x61, 0xEF, 0xC1, 0x67];
+
+        // 封包格式：
+        // [0..3]   = Header / Cmd / Len / Status
+        // [4..195] = 校正資料結構體 payload，共 192 bytes
+        // [196]    = PEC
+        //
+        // 原本設成 191 會把 caliKey 的低位元 0xAA 誤判成 PEC，
+        // 因此會固定出現「計算得 0x49，接收到 0xAA」。
+        const CAL_SYS_INFO_LEN = 66;     // 16*4 ASCII + uint16 ratePower
+        const CAL_INPUT_VOLT_LEN = 40;   // 10 * float32
+        const CAL_INPUT_CURR_LEN = 40;   // 10 * float32
+        const CAL_LOW_VBUS_LEN = 16;     // 4 * float32
+        const CAL_HIGH_VBUS_LEN = 16;    // 4 * float32
+        const CAL_XCAP_LEN = 8;          // 2 * float32
+        const CAL_INFO_LEN = 6;          // uint16 key + uint16 dataLen + uint16 crc
+        const targetResponseLen = 4
+            + CAL_SYS_INFO_LEN
+            + CAL_INPUT_VOLT_LEN
+            + CAL_INPUT_CURR_LEN
+            + CAL_LOW_VBUS_LEN
+            + CAL_HIGH_VBUS_LEN
+            + CAL_XCAP_LEN
+            + CAL_INFO_LEN
+            + 1; // PEC
+
+        const maxRetries = 25;
+        let readSuccess = false;
+
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                log(`[數據讀取] 發送讀取命令... 第 ${attempt} / ${maxRetries} 次嘗試`);
+                const rx = await sendAndAwaitCustomResponse(readPacket, 0x61, 1500, targetResponseLen);
+                
+                // 修正 2：加入 throw new Error 阻斷達到最大重試次數後的 Fall-through
+                if (rx[3] !== 0x00) {
+                    log(`⚠️ MCU 回傳狀態錯誤 [01] (表示讀取失敗)，丟棄此筆並準備重試。`, 'err');
+                    if (attempt < maxRetries) { 
+                        await new Promise(r => setTimeout(r, 50)); 
+                        continue; 
+                    } else {
+                        throw new Error("已達最大重試次數，MCU 狀態回傳持續錯誤");
+                    }
+                }
+
+                const payloadToCalc = rx.slice(0, targetResponseLen - 1);
+                const computedPEC = calculatePEC(payloadToCalc);
+                const receivedPEC = rx[targetResponseLen - 1];
+
+                if (computedPEC !== receivedPEC) {
+                    log(`❌ PEC 校驗錯誤！計算得: 0x${computedPEC.toString(16).toUpperCase()}，接收到: 0x${receivedPEC.toString(16).toUpperCase()}。丟棄此筆。`, 'err');
+                    if (attempt < maxRetries) { 
+                        await new Promise(r => setTimeout(r, 50)); 
+                        continue; 
+                    } else {
+                        throw new Error("已達最大重試次數，PEC 校驗依然失敗");
+                    }
+                }
+
+                log(`🎉 校正包讀取完成，校驗完全符合！開始解析二進位結構體...`);
+                const p = 4; 
+
+                // A. sys_info_t 解析
+                const customerName  = parseAsciiString(rx, p + 0, 16);
+                const moduleName    = parseAsciiString(rx, p + 16, 16);
+                const productDate   = parseAsciiString(rx, p + 32, 16);
+                const serialNumber  = parseAsciiString(rx, p + 48, 16);
+                const ratePower     = getUintValueLE(rx, p + 64, 2);
+
+                // B. input_voltage_t 解析
+                const offsetV = p + 66;
+                const calc0V   = parseFloat32LE(rx, offsetV + 0).toFixed(1);
+                const real0V   = parseFloat32LE(rx, offsetV + 4).toFixed(1);
+                const calc90V  = parseFloat32LE(rx, offsetV + 8).toFixed(1);
+                const real90V  = parseFloat32LE(rx, offsetV + 12).toFixed(1);
+                const calc115V = parseFloat32LE(rx, offsetV + 16).toFixed(1);
+                const real115V = parseFloat32LE(rx, offsetV + 20).toFixed(1);
+                const calc230V = parseFloat32LE(rx, offsetV + 24).toFixed(1);
+                const real230V = parseFloat32LE(rx, offsetV + 28).toFixed(1);
+                const calc264V = parseFloat32LE(rx, offsetV + 32).toFixed(1);
+                const real264V = parseFloat32LE(rx, offsetV + 36).toFixed(1);
+
+                // C. input_current_t 解析
+                const offsetI = offsetV + 40;
+                const calcI0   = parseFloat32LE(rx, offsetI + 0).toFixed(1);
+                const realI0   = parseFloat32LE(rx, offsetI + 4).toFixed(1);
+                const calcI15  = parseFloat32LE(rx, offsetI + 8).toFixed(1);
+                const realI15  = parseFloat32LE(rx, offsetI + 12).toFixed(1);
+                const calcI35  = parseFloat32LE(rx, offsetI + 16).toFixed(1);
+                const realI35  = parseFloat32LE(rx, offsetI + 20).toFixed(1);
+                const calcI70  = parseFloat32LE(rx, offsetI + 24).toFixed(1);
+                const realI70  = parseFloat32LE(rx, offsetI + 28).toFixed(1);
+                const calcI100 = parseFloat32LE(rx, offsetI + 32).toFixed(1);
+                const realI100 = parseFloat32LE(rx, offsetI + 36).toFixed(1);
+
+                // D. low_line_vbus_t 解析
+                const offsetLV = offsetI + 40;
+                const lv2   = parseFloat32LE(rx, offsetLV + 0).toFixed(1);
+                const lv10  = parseFloat32LE(rx, offsetLV + 4).toFixed(1);
+                const lv50  = parseFloat32LE(rx, offsetLV + 8).toFixed(1);
+                const lv100 = parseFloat32LE(rx, offsetLV + 12).toFixed(1);
+
+                // E. high_line_vbus_t 解析
+                const offsetHV = offsetLV + 16;
+                const hv2   = parseFloat32LE(rx, offsetHV + 0).toFixed(1);
+                const hv10  = parseFloat32LE(rx, offsetHV + 4).toFixed(1);
+                const hv50  = parseFloat32LE(rx, offsetHV + 8).toFixed(1);
+                const hv100 = parseFloat32LE(rx, offsetHV + 12).toFixed(1);
+
+                // F. xcap_coef_t 解析
+                const offsetXC = offsetHV + 16;
+                const xcLow  = parseFloat32LE(rx, offsetXC + 0).toFixed(3);
+                const xcHigh = parseFloat32LE(rx, offsetXC + 4).toFixed(3);
+
+                // G. cali_info_t 解析
+                const offsetInfo = offsetXC + 8;
+                const caliKey    = getUintValueLE(rx, offsetInfo + 0, 2);
+                const dataLength = getUintValueLE(rx, offsetInfo + 2, 2);
+                const crcData    = getUintValueLE(rx, offsetInfo + 4, 2);
+
+                // 更新前端看板
+                document.getElementById('rc_cust').innerText = customerName || "--";
+                document.getElementById('rc_mod').innerText = moduleName || "--";
+                document.getElementById('rc_date').innerText = productDate || "--";
+                document.getElementById('rc_sn').innerText = serialNumber || "--";
+                document.getElementById('rc_power').innerText = `${ratePower} W`;
+
+                document.getElementById('rc_v0_c').innerText = calc0V;   document.getElementById('rc_v0_r').innerText = real0V;
+                document.getElementById('rc_v90_c').innerText = calc90V; document.getElementById('rc_v90_r').innerText = real90V;
+                document.getElementById('rc_v115_c').innerText = calc115V;document.getElementById('rc_v115_r').innerText = real115V;
+                document.getElementById('rc_v230_c').innerText = calc230V;document.getElementById('rc_v230_r').innerText = real230V;
+                document.getElementById('rc_v264_c').innerText = calc264V;document.getElementById('rc_v264_r').innerText = real264V;
+
+                document.getElementById('rc_i0_c').innerText = calcI0;   document.getElementById('rc_i0_r').innerText = realI0;
+                document.getElementById('rc_i15_c').innerText = calcI15; document.getElementById('rc_i15_r').innerText = realI15;
+                document.getElementById('rc_i35_c').innerText = calcI35; document.getElementById('rc_i35_r').innerText = realI35;
+                document.getElementById('rc_i70_c').innerText = calcI70; document.getElementById('rc_i70_r').innerText = realI70;
+                document.getElementById('rc_i100_c').innerText = calcI100;document.getElementById('rc_i100_r').innerText = realI100;
+
+                document.getElementById('rc_lv_2').innerText = lv2;   document.getElementById('rc_lv_10').innerText = lv10;
+                document.getElementById('rc_lv_50').innerText = lv50; document.getElementById('rc_lv_100').innerText = lv100;
+                document.getElementById('rc_hv_2').innerText = hv2;   document.getElementById('rc_hv_10').innerText = hv10;
+                document.getElementById('rc_hv_50').innerText = hv50; document.getElementById('rc_hv_100').innerText = hv100;
+                document.getElementById('rc_xc_l').innerText = xcLow; document.getElementById('rc_xc_h').innerText = xcHigh;
+
+                const hexKeyStr = '0x' + caliKey.toString(16).toUpperCase();
+                document.getElementById('rc_key').innerText = hexKeyStr;
+                document.getElementById('rc_len').innerText = dataLength;
+                document.getElementById('rc_crc').innerText = '0x' + crcData.toString(16).toUpperCase();
+
+                const badge = document.getElementById('rc_status_badge');
+                if (caliKey === 0x55AA) {
+                    badge.className = "badge badge-success"; badge.innerText = "PASS (已完成校正)";
+                } else {
+                    badge.className = "badge badge-danger"; badge.innerText = "FACTORY / FAIL (未校正)";
+                }
+
+                statusText.innerText = "校正數據讀取並解析成功！";
+                statusText.style.color = "var(--success-green)";
+                readSuccess = true;
+                break;
+            } catch(err) {
+                log(`❌ 第 ${attempt} 次讀取異常: ${err.message}`, 'err');
+            }
+            if (!readSuccess && attempt < maxRetries) {
+                await new Promise(r => setTimeout(r, 50));
+            }
+        }
+
+        if (!readSuccess) {
+            statusText.innerText = "已達最大重試上限，數據讀取最終失敗。";
+            statusText.style.color = "var(--danger-red)";
+            alert("讀取校正參數包失敗，請檢查硬體通訊。");
+        }
+        readCalBtn.disabled = false;
+    };
+
+
+    // --- PFC 數據校正頁面邏輯群 ---
+    function stringToBytesPadded(str, length = 16) {
+        let arr = new Array(length).fill(0x00);
+        for(let i=0; i<Math.min(str.length, length); i++) {
+            arr[i] = str.charCodeAt(i) & 0xFF;
+        }
+        return arr;
+    }
+
+    async function execCalStep(stepNum) {
+        let header = [];
+        let desc = "";
+
+        switch(stepNum) {
+            case 1: header = [0x60, 0xFE, 0x02, 0xFE, 0xFF, 0x8C]; desc = "步驟 1: UNLOCK CALIBRATION"; break;
+            case 2: header = [0x60, 0xFE, 0x02, 0xFF, 0xFF, 0x99]; desc = "步驟 2: CLEAR ALL DATA"; break;
+            case 3: {
+                desc = "步驟 3: SET POWER RATE";
+                const watt = parseInt(document.getElementById('cal_p3_watt').value, 10) || 1800;
+                header = [0x60, 0x22, 0x03, 0xAA, watt & 0xFF, (watt >> 8) & 0xFF];
+                header.push(calculatePEC(header));
+                break;
+            }
+            case 4: {
+                desc = "步驟 4: SET SERIAL NUMBER";
+                const bytes = stringToBytesPadded(document.getElementById('cal_p4_sn').value, 16);
+                header = [0x60, 0x22, 0x11, 0xBB, ...bytes]; header.push(calculatePEC(header));
+                break;
+            }
+            case 5: {
+                desc = "步驟 5: SET PRODUCTION DATE";
+                const bytes = stringToBytesPadded(document.getElementById('cal_p5_date').value, 16);
+                header = [0x60, 0x22, 0x11, 0xCC, ...bytes]; header.push(calculatePEC(header));
+                break;
+            }
+            case 6: {
+                desc = "步驟 6: SET MODULE NAME";
+                const bytes = stringToBytesPadded(document.getElementById('cal_p6_name').value, 16);
+                header = [0x60, 0x22, 0x11, 0xDD, ...bytes]; header.push(calculatePEC(header));
+                break;
+            }
+            case 7: {
+                desc = "步驟 7: SET CUSTOMER NAME";
+                const bytes = stringToBytesPadded(document.getElementById('cal_p7_cust').value, 16);
+                header = [0x60, 0x22, 0x11, 0xEE, ...bytes]; header.push(calculatePEC(header));
+                break;
+            }
+            case 8:  header = [0x60, 0xAA, 0x02, 0x28, 0x23, 0xF6]; desc = "步驟 8: CALIBRATE 90Vac"; break;
+            case 9:  header = [0x60, 0xAA, 0x02, 0xEC, 0x2C, 0x62]; desc = "步驟 9: CALIBRATE 115Vac"; break;
+            case 10: header = [0x60, 0xAA, 0x02, 0xD8, 0x59, 0x83]; desc = "步驟 10: CALIBRATE 230Vac"; break;
+            case 11: header = [0x60, 0xAA, 0x02, 0x20, 0x67, 0x85]; desc = "步驟 11: CALIBRATE 264Vac"; break;
+            
+            case 12: {
+                desc = "步驟 12: CALIBRATE Iac at 15% Load";
+                const scale = Math.round((parseFloat(document.getElementById('cal_p12_iac').value) || 2.35) * 100);
+                header = [0x60, 0xCC, 0x02, scale & 0xFF, (scale >> 8) & 0xFF]; header.push(calculatePEC(header));
+                break;
+            }
+            case 13: {
+                desc = "步驟 13: CALIBRATE Iac at 35% Load";
+                const scale = Math.round((parseFloat(document.getElementById('cal_p13_iac').value) || 5.48) * 100);
+                header = [0x60, 0xCC, 0x02, scale & 0xFF, (scale >> 8) & 0xFF]; header.push(calculatePEC(header));
+                break;
+            }
+            case 14: {
+                desc = "步驟 14: CALIBRATE Iac at 70% Load";
+                const scale = Math.round((parseFloat(document.getElementById('cal_p14_iac').value) || 10.96) * 100);
+                header = [0x60, 0xCC, 0x02, scale & 0xFF, (scale >> 8) & 0xFF]; header.push(calculatePEC(header));
+                break;
+            }
+            case 15: {
+                desc = "步驟 15: CALIBRATE Iac at 100% Load";
+                const scale = Math.round((parseFloat(document.getElementById('cal_p15_iac').value) || 15.65) * 100);
+                header = [0x60, 0xCC, 0x02, scale & 0xFF, (scale >> 8) & 0xFF]; header.push(calculatePEC(header));
+                break;
+            }
+            case 16: {
+                desc = "步驟 16: CALIBRATE XCAP at 115Vac/10%";
+                const scale = Math.round((parseFloat(document.getElementById('cal_p16_xcap').value) || 1.57) * 1000);
+                header = [0x60, 0x99, 0x02, scale & 0xFF, (scale >> 8) & 0xFF]; header.push(calculatePEC(header));
+                break;
+            }
+            case 17: {
+                desc = "步驟 17: CALIBRATE XCAP at 230Vac/10%";
+                const scale = Math.round((parseFloat(document.getElementById('cal_p17_xcap').value) || 0.783) * 1000);
+                header = [0x60, 0x99, 0x02, scale & 0xFF, (scale >> 8) & 0xFF]; header.push(calculatePEC(header));
+                break;
+            }
+            case 26: header = [0x60, 0xFE, 0x02, 0xDD, 0xFF, 0x1D]; desc = "步驟 26: COMPILE AND SAVE DATA"; break;
+            case 27: header = [0x60, 0xFE, 0x02, 0x55, 0xFF, 0x03]; desc = "步驟 27: LOCK CALIBRATION"; break;
+        }
+
+        log(`執行: ${desc}...`);
+        try {
+            const rx = await sendAndAwaitCustomResponse(header, 0x60, 400, 5);
+            log(`接收回應 (RX): ${bytesToHexStr(rx)}`);
+        } catch(err) {
+            log(`❌ ${desc} 失敗: ${err.message}`, 'err');
+        }
+    }
+
+    async function execVbusManualClickCal() {
+        const btn = document.getElementById('vbusManualBtn'); btn.disabled = true;
+        vbusManualClickCount++; 
+        const currentStepNum = 17 + vbusManualClickCount; 
+        
+        log(`[手動觸發] 發送 VBUS 自動校正命令 (當前進度: 步驟 ${currentStepNum} / 第 ${vbusManualClickCount} 次點擊)`);
+        const vbusPacket = [0x60, 0xBB, 0x03, 0xFF, 0x55, 0xAA, 0x30]; 
+        
+        try {
+            const rx = await sendAndAwaitCustomResponse(vbusPacket, 0x60, 300, 5);
+            log(`步驟 ${currentStepNum} 回應接收成功: ${bytesToHexStr(rx)}`);
+        } catch(err) {
+            log(`❌ 步驟 ${currentStepNum} 發送失敗: ${err.message}`, 'err');
+        }
+        
+        const textElem = document.getElementById('vbusCounterText');
+        if (vbusManualClickCount >= 8) {
+            log("🎉 已手動執行滿 8 次 VBUS 校正 (步驟 18~25 完成)，進度計數器已自動歸零重置。");
+            vbusManualClickCount = 0; textElem.innerText = `當前手動點擊進度: 0 / 8`;
+        } else {
+            textElem.innerText = `當前手動點擊進度: ${vbusManualClickCount} / 8`;
+        }
+        btn.disabled = false;
+    }
+
+
+
+
+    // --- Black Box 數據讀取 / 清除 ---
+    function delayMs(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+    function validateBlackBoxReadPacket(rx) {
+        if (rx[0] !== 0x61 || rx[1] !== 0x49) throw new Error("回傳 Header 錯誤");
+
+        const lenField = rx[2];
+        const expectedTotalLen = 3 + lenField + 1;
+        if (rx.length !== expectedTotalLen) {
+            throw new Error(`長度錯誤：LEN=0x${lenField.toString(16).toUpperCase()}，實收 ${rx.length} bytes，預期 ${expectedTotalLen} bytes`);
+        }
+
+        const status = rx[3];
+        if (status !== 0x00) {
+            throw new Error(`MCU 回傳狀態錯誤 [${status.toString(16).padStart(2, '0').toUpperCase()}]`);
+        }
+
+        const computedPEC = calculatePEC(rx.slice(0, rx.length - 1));
+        const receivedPEC = rx[rx.length - 1];
+        if (computedPEC !== receivedPEC) {
+            throw new Error(`PEC 校驗錯誤：計算得 0x${computedPEC.toString(16).toUpperCase()}，接收到 0x${receivedPEC.toString(16).toUpperCase()}`);
+        }
+
+        const dataLen = lenField - 1;
+        if (dataLen % 4 !== 0) {
+            throw new Error(`Black Box 資料長度錯誤：${dataLen} bytes 不是 4 的倍數`);
+        }
+
+        return { lenField, dataBytes: rx.slice(4, rx.length - 1), computedPEC, receivedPEC };
+    }
+
+    function parseBlackBoxFaultRecords(dataBytes) {
+        const records = [];
+        const errors = [];
+
+        for (let offset = 0; offset < dataBytes.length; offset += 4) {
+            const rawBytes = dataBytes.slice(offset, offset + 4);
+            const rawVal = ((rawBytes[0]) | (rawBytes[1] << 8) | (rawBytes[2] << 16) | (rawBytes[3] << 24)) >>> 0;
+            const recordIndex = offset / 4 + 1;
+            records.push(rawVal);
+
+            // 00 00 00 00 是 MCU 誤觸發紀錄，不顯示。
+            if (rawVal === 0) continue;
+
+            BLACKBOX_FAULT_FIELDS.forEach((name, bit) => {
+                if (((rawVal >>> bit) & 1) && !name.startsWith("reserve_")) {
+                    errors.push({ recordIndex, bit, name, rawVal });
+                }
+            });
+        }
+
+        return { records, errors };
+    }
+
+    function updateBlackBoxUI(rx, parsed, decoded) {
+        document.getElementById('bb_record_count').innerText = decoded.records.length.toString();
+        document.getElementById('bb_error_count').innerText = decoded.errors.length.toString();
+        document.getElementById('bb_len').innerText = `0x${parsed.lenField.toString(16).toUpperCase().padStart(2, '0')} (${parsed.lenField})`;
+        document.getElementById('bb_pec').innerText = `OK, 0x${parsed.receivedPEC.toString(16).toUpperCase().padStart(2, '0')}`;
+        document.getElementById('blackBoxRaw').innerText = `RAW: ${bytesToHexStr(rx)}`;
+
+        const tbody = document.getElementById('blackBoxTableBody');
+        tbody.innerHTML = '';
+        if (decoded.errors.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="3" class="blackbox-empty">無有效 Black Box 錯誤紀錄，或只有 00 00 00 00 誤觸發紀錄。</td></tr>';
+            return;
+        }
+
+        decoded.errors.forEach((item, index) => {
+            const tr = document.createElement('tr');
+            tr.title = `record #${item.recordIndex}, bit ${item.bit}, raw=0x${item.rawVal.toString(16).toUpperCase().padStart(8, '0')}`;
+
+            const noTd = document.createElement('td');
+            noTd.className = 'bb-no';
+            noTd.textContent = index + 1;
+
+            const protectionTd = document.createElement('td');
+            protectionTd.className = 'bb-protection';
+            protectionTd.textContent = item.name;
+
+            const detailTd = document.createElement('td');
+            detailTd.className = 'bb-detail';
+            detailTd.textContent = BLACKBOX_FAULT_DETAILS[item.name] || '--';
+
+            tr.appendChild(noTd);
+            tr.appendChild(protectionTd);
+            tr.appendChild(detailTd);
+            tbody.appendChild(tr);
+        });
+    }
+
+    async function readBlackBoxData() {
+        const maxRetries = 25;
+        const statusText = document.getElementById('blackBoxStatus');
+        const cmd = [0x61, 0x49, 0x01, 0x4F];
+
+        readBlackBoxBtn.disabled = true;
+        clearBlackBoxBtn.disabled = true;
+        statusText.innerText = "正在讀取 Black Box 數據...";
+        statusText.style.color = "var(--primary-blue)";
+
+        let success = false;
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                log(`[Black Box] 發送讀取命令... 第 ${attempt} / ${maxRetries} 次嘗試`);
+                const rx = await sendAndAwaitVariableLengthResponse(cmd, 0x61, 0x49, 3000);
+                log(`接收 (RX): ${bytesToHexStr(rx)}`, 'rx');
+
+                const parsed = validateBlackBoxReadPacket(rx);
+                const decoded = parseBlackBoxFaultRecords(parsed.dataBytes);
+                updateBlackBoxUI(rx, parsed, decoded);
+
+                statusText.innerText = `Black Box 讀取成功，共 ${decoded.records.length} 筆資料、${decoded.errors.length} 個有效錯誤項目。`;
+                statusText.style.color = "var(--success-green)";
+                log(`🎉 Black Box 讀取成功，PEC 校驗符合。有效錯誤項目 ${decoded.errors.length} 個。`);
+                success = true;
+                break;
+            } catch (err) {
+                log(`❌ Black Box 第 ${attempt} 次讀取失敗: ${err.message}`, 'err');
+                if (attempt < maxRetries) await delayMs(250);
+            }
+        }
+
+        if (!success) {
+            statusText.innerText = "Black Box 讀取失敗，已達最大重試次數。";
+            statusText.style.color = "var(--danger-red)";
+            alert("Black Box 讀取失敗，請檢查 MCU 狀態與通訊。")
+        }
+
+        readBlackBoxBtn.disabled = false;
+        clearBlackBoxBtn.disabled = false;
+    }
+
+    async function clearBlackBoxData() {
+        const maxRetries = 25;
+        const statusText = document.getElementById('blackBoxStatus');
+        const cmd = [0x60, 0x49, 0x01, 0x24];
+
+        readBlackBoxBtn.disabled = true;
+        clearBlackBoxBtn.disabled = true;
+        statusText.innerText = "正在清除 Black Box 數據...";
+        statusText.style.color = "var(--primary-blue)";
+
+        let success = false;
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                log(`[Black Box] 發送清除命令... 第 ${attempt} / ${maxRetries} 次嘗試`);
+                const rx = await sendAndAwaitCustomResponse(cmd, 0x60, 3000, 5);
+                log(`接收 (RX): ${bytesToHexStr(rx)}`, 'rx');
+
+                if (rx[0] !== 0x60 || rx[1] !== 0x49 || rx[2] !== 0x01) {
+                    throw new Error("清除回傳 Header / Length 錯誤");
+                }
+                if (rx[3] !== 0x00) {
+                    throw new Error(`MCU 回傳清除失敗狀態 [${rx[3].toString(16).padStart(2, '0').toUpperCase()}]`);
+                }
+                const computedPEC = calculatePEC(rx.slice(0, rx.length - 1));
+                const receivedPEC = rx[rx.length - 1];
+                if (computedPEC !== receivedPEC) {
+                    throw new Error(`PEC 校驗錯誤：計算得 0x${computedPEC.toString(16).toUpperCase()}，接收到 0x${receivedPEC.toString(16).toUpperCase()}`);
+                }
+
+                document.getElementById('bb_record_count').innerText = "0";
+                document.getElementById('bb_error_count').innerText = "0";
+                document.getElementById('bb_len').innerText = "--";
+                document.getElementById('bb_pec').innerText = `OK, 0x${receivedPEC.toString(16).toUpperCase().padStart(2, '0')}`;
+                document.getElementById('blackBoxTableBody').innerHTML = '<tr><td colspan="3" class="blackbox-empty">Black Box 數據已清除。</td></tr>';
+                document.getElementById('blackBoxRaw').innerText = `RAW: ${bytesToHexStr(rx)}`;
+
+                statusText.innerText = "Black Box 清除成功。";
+                statusText.style.color = "var(--success-green)";
+                log("🎉 Black Box 清除成功，ACK 與 PEC 校驗符合。");
+                success = true;
+                break;
+            } catch (err) {
+                log(`❌ Black Box 第 ${attempt} 次清除失敗: ${err.message}`, 'err');
+                if (attempt < maxRetries) await delayMs(800);
+            }
+        }
+
+        if (!success) {
+            statusText.innerText = "Black Box 清除失敗，已達最大重試次數。";
+            statusText.style.color = "var(--danger-red)";
+            alert("Black Box 清除失敗，請檢查 MCU 狀態與 Flash 擦寫流程。")
+        }
+
+        readBlackBoxBtn.disabled = false;
+        clearBlackBoxBtn.disabled = false;
+    }
+
+    readBlackBoxBtn.addEventListener('click', readBlackBoxData);
+    clearBlackBoxBtn.addEventListener('click', clearBlackBoxData);
+
+
+    // --- 全局共用主題切換功能 ---
+    document.getElementById('globalThemeToggle').onclick = () => {
+        const cur = document.body.getAttribute('data-theme'), next = cur === 'light' ? 'dark' : 'light';
+        document.body.setAttribute('data-theme', next);
+        
+        const txt = next === 'dark' ? '#e0e0e0' : '#333', grid = next === 'dark' ? '#444' : '#dee2e6';
+        for (let id in charts) { 
+            charts[id].options.scales.y.ticks.color = txt; 
+            charts[id].options.scales.y.grid.color = grid; 
+            charts[id].update(); 
+        }
+    };
+
+    // 初始化基礎圖表與元件
+    initCharts();
+</script>
+</body>
+</html>
