@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>PFC 綜合除錯與監控工作台 Pro v6.0</title>
+    <title>PFC 綜合除錯與監控工作台 Pro v6.1</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
@@ -227,7 +227,7 @@
 
                 <div class="flags-container">
                     <div class="flag-box"><div class="flag-header" style="background:#0984e3"><span>STATE FLAGS</span><span id="state-hex">0x00000000</span></div><div id="state-grid" class="flag-grid"></div></div>
-                    <div class="flag-box"><div class="flag-header" style="background:#6c5ce7"><span>CBC TRIGGER FLAGS</span><span id="cbc-hex">0x00</span></div><div id="cbc-grid" class="flag-grid"></div></div>
+                    <div class="flag-box"><div class="flag-header" style="background:#6c5ce7"><span>CBC TRIGGER FLAGS</span><span id="cbc-hex">0x000</span></div><div id="cbc-grid" class="flag-grid"></div></div>
                     <div class="flag-box"><div class="flag-header" style="background:#d63031"><span>FAULT FLAGS</span><span id="fault-hex">0x00000000</span></div><div id="fault-grid" class="flag-grid"></div></div>
                 </div>
             </div>
@@ -473,7 +473,7 @@
     // bit 0~20：一般系統狀態，維持顯示於 STATE FLAGS
     const STATE_FIELDS = ["il_bias_cal_done", "ps_on_off", "relay_ready_flag", "watch_dog_occur", "burst_mode", "peak_load_mode", "dynamic_mode", "dcm_mode", "interleaving_mode", "phase_shedding_mode", "ac_input", "input_polarity", "ultra_high_input", "high_line_input", "surge_detect", "input_loss", "input_recovery", "cbc_latched", "cbc_recovery", "en_fast_switch", "bus_ok_info"];
 
-    // bit 21~28：CBC/Analog Watchdog/Comparator 觸發旗標，獨立顯示於 CBC TRIGGER FLAGS
+    // bit 21~29：CBC/Analog Watchdog/Comparator/Software 觸發旗標，獨立顯示於 CBC TRIGGER FLAGS
     const CBC_TRIGGER_FIELDS = [
         { bit: 21, name: "cbc_awdt_ila_trig", desc: "ILA Analog Watchdog" },
         { bit: 22, name: "cbc_awdt_ilb_trig", desc: "ILB Analog Watchdog" },
@@ -482,7 +482,8 @@
         { bit: 25, name: "cbc_awdt_vbus_trig", desc: "VBUS Analog Watchdog" },
         { bit: 26, name: "cbc_comp_ila_trig", desc: "ILA Comparator" },
         { bit: 27, name: "cbc_comp_ilb_trig", desc: "ILB Comparator" },
-        { bit: 28, name: "cbc_comp_vbus_trig", desc: "VBUS Comparator" }
+        { bit: 28, name: "cbc_comp_vbus_trig", desc: "VBUS Comparator" },
+        { bit: 29, name: "cbc_sw_vbus_trig", desc: "VBUS Software Off Trigger" }
     ];
     const FAULT_FIELDS = ["watch_dog_err", "nmi_err", "hard_fault_err", "mem_manage_err", "bus_fault_err", "usage_fault_err", "hw_err", "input_ovp", "input_uvp", "input_ocp", "ac_freq_err", "vbus_ovp", "vbus_fast_ovp", "vbus_uvp", "vbus_short", "il_a_cbc", "il_b_cbc", "pfc_otp", "llc_otp", "amb_otp", "ps_on_off"];
     const BLACKBOX_FAULT_FIELDS = [
@@ -645,9 +646,9 @@
         const faultVal = getUintValueLE(data, 8, 4);
         const smCode = getUintValueLE(data, 12, 2);
 
-        const cbcVal = (stateVal >>> 21) & 0xFF;
+        const cbcVal = (stateVal >>> 21) & 0x1FF;
         document.getElementById('state-hex').innerText = '0x' + (stateVal >>> 0).toString(16).toUpperCase().padStart(8, '0');
-        document.getElementById('cbc-hex').innerText = '0x' + cbcVal.toString(16).toUpperCase().padStart(2, '0');
+        document.getElementById('cbc-hex').innerText = '0x' + cbcVal.toString(16).toUpperCase().padStart(3, '0');
         document.getElementById('fault-hex').innerText = '0x' + (faultVal >>> 0).toString(16).toUpperCase().padStart(8, '0');
 
         const vals = {
