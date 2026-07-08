@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>PFC 綜合除錯與監控工作台 Pro v6.1</title>
+    <title>PFC 綜合除錯與監控工作台 Pro v6.3</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
@@ -156,6 +156,98 @@
         .blackbox-empty { color: var(--text-muted); font-weight: bold; text-align: center !important; padding: 18px !important; }
         .blackbox-raw { margin-top: 15px; padding: 10px; background: var(--card-bg); border: 1px dashed var(--border-color); border-radius: 6px; font-family: 'Consolas', monospace; font-size: 12px; word-break: break-all; color: var(--text-muted); }
 
+
+
+        /* 在線調整參數頁面 */
+        .sidebar-item.secure-locked { background: #6c757d !important; color: #e9ecef !important; cursor: pointer; opacity: 0.82; }
+        .sidebar-item.secure-locked:hover { background: #5f676e !important; }
+        /* 在線調整參數：響應式排版，避免輸入框/按鈕撐破卡片 */
+        .adjust-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 16px;
+            width: 100%;
+        }
+        .adjust-section {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 16px;
+            box-shadow: 0 3px 8px rgba(0,0,0,0.03);
+            min-width: 0;
+            overflow: hidden;
+        }
+        .adjust-section h3 {
+            margin: 0 0 12px 0;
+            color: var(--primary-blue);
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 8px;
+            overflow-wrap: anywhere;
+        }
+        .adjust-buttons {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 9px;
+        }
+        .adjust-buttons button {
+            min-width: 0;
+            width: 100%;
+            white-space: normal;
+            line-height: 1.25;
+        }
+        .adjust-row {
+            display: grid;
+            grid-template-columns: minmax(115px, 1fr) minmax(0, 150px) minmax(68px, auto);
+            gap: 10px;
+            align-items: center;
+            margin: 10px 0;
+            min-width: 0;
+        }
+        .adjust-row.dual-action {
+            grid-template-columns: minmax(115px, 1fr) minmax(0, 150px) 68px 68px;
+        }
+        .adjust-row > * { min-width: 0; }
+        .adjust-row label {
+            overflow-wrap: anywhere;
+            line-height: 1.3;
+        }
+        .adjust-row input {
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-gray);
+            color: var(--text-main);
+            font-family: monospace;
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
+        }
+        .adjust-row button {
+            width: 100%;
+            min-width: 0;
+            padding-left: 10px;
+            padding-right: 10px;
+            white-space: nowrap;
+        }
+        .adjust-note { margin-top: 8px; color: var(--text-muted); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+        .adjust-status { margin-top: 15px; padding: 10px 12px; border-radius: 6px; background: var(--bg-gray); border: 1px solid var(--border-color); font-weight: bold; color: var(--text-muted); }
+
+        /* 側欄存在時，中等寬度優先改單欄，避免控制項互相覆蓋 */
+        @media (max-width: 1250px) {
+            .adjust-grid { grid-template-columns: minmax(0, 1fr); }
+        }
+
+        /* 手機/窄視窗：Label、輸入框、按鈕分行 */
+        @media (max-width: 700px) {
+            .adjust-row,
+            .adjust-row.dual-action {
+                grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            }
+            .adjust-row label { grid-column: 1 / -1; }
+            .adjust-row input { grid-column: 1 / -1; }
+            .adjust-buttons { grid-template-columns: minmax(0, 1fr); }
+        }
+
         /* 全局底部共用主控台 (Console) */
         .global-console-panel { height: 200px; background-color: var(--log-bg); color: var(--log-text); border-top: 2px solid var(--border-color); display: flex; flex-direction: column; flex-shrink: 0; transition: 0.2s; z-index: 101;}
         .console-header { padding: 6px 15px; background: rgba(0, 0, 0, 0.2); font-size: 12px; font-weight: bold; color: var(--sidebar-text); display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); }
@@ -173,6 +265,7 @@
             <li class="sidebar-item" onclick="switchTab('page-readcal', this)">校正數據讀取</li>
             <li class="sidebar-item disabled" title="此功能暫不開放使用者使用">PFC 數據校正</li>
             <li class="sidebar-item" onclick="switchTab('page-blackbox', this)">Black Box數據</li>
+            <li id="onlineAdjustTab" class="sidebar-item secure-locked" onclick="requestOnlineAdjustAccess(this)" title="需要密碼授權">在線調整參數</li>
         </ul>
     </div>
 
@@ -456,6 +549,96 @@
             </div>
 
 
+            <div id="page-online-adjust" class="page-content">
+                <div class="card">
+                    <h2>在線調整參數</h2>
+                    <div class="adjust-status" id="onlineAdjustStatus">已通過頁面授權，等待執行命令...</div>
+                </div>
+
+                <div class="adjust-grid">
+                    <div class="adjust-section">
+                        <h3>第一區塊：Adjust Mode / Data Control</h3>
+                        <div class="adjust-buttons">
+                            <button class="btn-green online-adjust-btn" disabled onclick="sendOnlineFixedCommand('Unlock Adjust Mode',[0x60,0xFE,0x02,0x55,0xEE])">Unlock Adjust Mode</button>
+                            <button class="btn-red online-adjust-btn" disabled onclick="sendOnlineFixedCommand('Lock Adjust Mode',[0x60,0xFE,0x02,0x55,0xFF])">Lock Adjust Mode</button>
+                            <button class="btn-green online-adjust-btn" disabled onclick="sendOnlineFixedCommand('Unlock Xcap Offset Current Adjust',[0x60,0xFE,0x02,0x99,0xEE])">Unlock Xcap Offset Current Adjust</button>
+                            <button class="btn-red online-adjust-btn" disabled onclick="sendOnlineFixedCommand('Lock Xcap Offset Current Adjust',[0x60,0xFE,0x02,0x99,0xFF])">Lock Xcap Offset Current Adjust</button>
+                            <button class="btn-green online-adjust-btn" disabled onclick="sendOnlineFixedCommand('Unlock Bus Voltage Adjust',[0x60,0xFE,0x02,0xBC,0xEE])">Unlock Bus Voltage Adjust</button>
+                            <button class="btn-red online-adjust-btn" disabled onclick="sendOnlineFixedCommand('Lock Bus Voltage Adjust',[0x60,0xFE,0x02,0xBC,0xFF])">Lock Bus Voltage Adjust</button>
+                            <button class="btn-green online-adjust-btn" disabled onclick="sendOnlineFixedCommand('Unlock DCM Coefficient Adjust',[0x60,0xFE,0x02,0xDC,0xEE])">Unlock DCM Coefficient Adjust</button>
+                            <button class="btn-red online-adjust-btn" disabled onclick="sendOnlineFixedCommand('Lock DCM Coefficient Adjust',[0x60,0xFE,0x02,0xDC,0xFF])">Lock DCM Coefficient Adjust</button>
+                            <button class="btn-purple online-adjust-btn" disabled onclick="sendOnlineFixedCommand('Clear Original Data',[0x60,0xFE,0x02,0xFF,0xFF], true)">Clear Original Data</button>
+                        </div>
+                    </div>
+
+                    <div class="adjust-section">
+                        <h3>第二區塊：Bus Voltage Adjust</h3>
+                        <div class="adjust-row dual-action">
+                            <label>調整值 (V)</label>
+                            <input id="adj_bus_voltage" type="number" min="0" step="0.001" value="7.5">
+                            <button class="btn-green online-adjust-btn" disabled onclick="sendScaledAdjust('Bus Voltage +','adj_bus_voltage',1000,[0x60,0xBC,0x03,0x55],4)">Add</button>
+                            <button class="btn-red online-adjust-btn" disabled onclick="sendScaledAdjust('Bus Voltage -','adj_bus_voltage',1000,[0x60,0xBC,0x03,0xAA],4)">Minus</button>
+                        </div>
+                        <div class="adjust-note">輸入值 ×1000，uint16 LSB first。例：7.5 → 7500 → 0x1D4C → 4C 1D。</div>
+                    </div>
+
+                    <div class="adjust-section">
+                        <h3>第三區塊：Xcap Offset Current</h3>
+                        <div class="adjust-row">
+                            <label>補償值 (A)</label>
+                            <input id="adj_xcap" type="number" min="0" step="0.001" value="0.75">
+                            <button class="btn-blue online-adjust-btn" disabled onclick="sendScaledAdjust('Xcap Offset Current','adj_xcap',1000,[0x60,0x99,0x02],3)">Adjust</button>
+                        </div>
+                        <div class="adjust-note">輸入值 ×1000，uint16 LSB first。例：0.75 → 750 → EE 02。</div>
+                    </div>
+
+                    <div class="adjust-section">
+                        <h3>第四區塊：DCM Coefficient</h3>
+                        <div class="adjust-row">
+                            <label>Coefficient</label>
+                            <input id="adj_dcm" type="number" min="0" step="0.001" value="1.25">
+                            <button class="btn-blue online-adjust-btn" disabled onclick="sendScaledAdjust('DCM Coefficient','adj_dcm',1000,[0x60,0xDC,0x02],3)">Adjust</button>
+                        </div>
+                        <div class="adjust-note">輸入值 ×1000，uint16 LSB first。例：1.25 → 1250 → E2 04。</div>
+                    </div>
+
+                    <div class="adjust-section">
+                        <h3>第五區塊：Voltage Loop</h3>
+                        <div class="adjust-row dual-action">
+                            <label>Voltage Loop Kp</label>
+                            <input id="adj_vloop_kp" type="number" min="0" step="0.00001" value="0.005">
+                            <button class="btn-green online-adjust-btn" disabled onclick="sendLoopGainAdjust('Voltage Loop Kp +','adj_vloop_kp',0x11,0x55)">Add</button>
+                            <button class="btn-red online-adjust-btn" disabled onclick="sendLoopGainAdjust('Voltage Loop Kp -','adj_vloop_kp',0x11,0xAA)">Minus</button>
+                        </div>
+                        <div class="adjust-row dual-action">
+                            <label>Voltage Loop Ki</label>
+                            <input id="adj_vloop_ki" type="number" min="0" step="0.00001" value="0.0001">
+                            <button class="btn-green online-adjust-btn" disabled onclick="sendLoopGainAdjust('Voltage Loop Ki +','adj_vloop_ki',0x22,0x55)">Add</button>
+                            <button class="btn-red online-adjust-btn" disabled onclick="sendLoopGainAdjust('Voltage Loop Ki -','adj_vloop_ki',0x22,0xAA)">Minus</button>
+                        </div>
+                        <div class="adjust-note">輸入值 ×100000，uint16 LSB first。Kp 與 Ki 分開輸入。</div>
+                    </div>
+
+                    <div class="adjust-section">
+                        <h3>第六區塊：Current Loop</h3>
+                        <div class="adjust-row dual-action">
+                            <label>Current Loop Kp</label>
+                            <input id="adj_iloop_kp" type="number" min="0" step="0.00001" value="0.07">
+                            <button class="btn-green online-adjust-btn" disabled onclick="sendLoopGainAdjust('Current Loop Kp +','adj_iloop_kp',0x33,0x55)">Add</button>
+                            <button class="btn-red online-adjust-btn" disabled onclick="sendLoopGainAdjust('Current Loop Kp -','adj_iloop_kp',0x33,0xAA)">Minus</button>
+                        </div>
+                        <div class="adjust-row dual-action">
+                            <label>Current Loop Ki</label>
+                            <input id="adj_iloop_ki" type="number" min="0" step="0.00001" value="0.008">
+                            <button class="btn-green online-adjust-btn" disabled onclick="sendLoopGainAdjust('Current Loop Ki +','adj_iloop_ki',0x44,0x55)">Add</button>
+                            <button class="btn-red online-adjust-btn" disabled onclick="sendLoopGainAdjust('Current Loop Ki -','adj_iloop_ki',0x44,0xAA)">Minus</button>
+                        </div>
+                        <div class="adjust-note">輸入值 ×100000，uint16 LSB first。Kp 與 Ki 分開輸入。</div>
+                    </div>
+                </div>
+            </div>
+
+
         </div>
 
         <div class="global-console-panel">
@@ -531,6 +714,7 @@
     let rxBuffer = []; 
     let lastDataTime = 0, csvData = [];
     let vbusManualClickCount = 0; 
+    let onlineAdjustAuthorized = false;
     const charts = {};
     const maxValues = {'chart-vbus':10, 'chart-pin':10, 'chart-pout':10, 'chart-tpfc':0, 'chart-tllc':0, 'chart-tamb':0};
 
@@ -766,6 +950,7 @@
             readCalBtn.disabled = true;
             readBlackBoxBtn.disabled = true;
             clearBlackBoxBtn.disabled = true;
+            setOnlineAdjustButtonsEnabled(false);
             toggleCalButtons(true); 
             
             document.getElementById('statusLed').className = "led"; 
@@ -792,6 +977,7 @@
             readCalBtn.disabled = false;
             readBlackBoxBtn.disabled = false;
             clearBlackBoxBtn.disabled = false;
+            setOnlineAdjustButtonsEnabled(onlineAdjustAuthorized);
             toggleCalButtons(false); 
 
             healthTimer = setInterval(checkHealth, 500);
@@ -895,6 +1081,8 @@
             window.addEventListener('serial-rx', onRxEvent);
 
             try {
+                // 若背景監控原本啟動，先確實停止 20ms 輪詢並留至少一個週期讓 MCU/串口空閒。
+                if (resumeMonitor) await new Promise(r => setTimeout(r, 25));
                 await writer.write(new Uint8Array(payload));
                 log(`發送 (TX): ${bytesToHexStr(payload)}`, 'tx');
                 onRxEvent(); // 若資料在 listener 掛上前已進 rxBuffer，立刻檢查一次
@@ -968,6 +1156,8 @@
             window.addEventListener('serial-rx', onRxEvent);
 
             try {
+                // 若背景監控原本啟動，先確實停止 20ms 輪詢並留至少一個週期讓 MCU/串口空閒。
+                if (resumeMonitor) await new Promise(r => setTimeout(r, 25));
                 await writer.write(new Uint8Array(payload));
                 log(`發送 (TX): ${bytesToHexStr(payload)}`, 'tx');
                 onRxEvent();
@@ -1557,6 +1747,135 @@
 
     readBlackBoxBtn.addEventListener('click', readBlackBoxData);
     clearBlackBoxBtn.addEventListener('click', clearBlackBoxData);
+
+
+    // --- 在線調整參數：密碼授權 / 動態封包 / ACK 驗證 ---
+    function setOnlineAdjustButtonsEnabled(enabled) {
+        document.querySelectorAll('.online-adjust-btn').forEach(btn => {
+            btn.disabled = !(enabled && port && writer);
+        });
+    }
+
+    function requestOnlineAdjustAccess(tabElement) {
+        if (!onlineAdjustAuthorized) {
+            const pwd = window.prompt('請輸入「在線調整參數」頁面密碼：');
+            if (pwd === null) return;
+            if (pwd !== 'Delta@FW123') {
+                alert('密碼錯誤，無法開啟此頁面。');
+                log('❌ 在線調整參數頁面密碼驗證失敗。', 'err');
+                return;
+            }
+            onlineAdjustAuthorized = true;
+            tabElement.classList.remove('secure-locked');
+            tabElement.title = '已授權';
+            setOnlineAdjustButtonsEnabled(true);
+            log('🔓 在線調整參數頁面已通過密碼授權。');
+        }
+        switchTab('page-online-adjust', tabElement);
+    }
+
+    function buildPacketWithPEC(bytesWithoutPEC) {
+        const p = Array.from(bytesWithoutPEC, b => b & 0xFF);
+        p.push(calculatePEC(p));
+        return p;
+    }
+
+    function parseNonNegativeScaledUInt16(inputId, scale) {
+        const el = document.getElementById(inputId);
+        const value = Number(el.value);
+        if (!Number.isFinite(value) || value < 0) throw new Error('輸入值必須是大於等於 0 的有效數字');
+        const scaled = Math.round(value * scale);
+        if (scaled < 0 || scaled > 0xFFFF) throw new Error(`轉換後數值 ${scaled} 超出 uint16 範圍 0~65535`);
+        return { value, scaled, lo: scaled & 0xFF, hi: (scaled >>> 8) & 0xFF };
+    }
+
+    function validateOnlineAdjustAck(rx, expectedGroup) {
+        if (rx.length !== 5) throw new Error(`ACK 長度錯誤：${rx.length} bytes`);
+        if (rx[0] !== 0x60 || rx[1] !== expectedGroup || rx[2] !== 0x01) {
+            throw new Error(`ACK Header/Group 錯誤，期望 60 ${expectedGroup.toString(16).toUpperCase().padStart(2,'0')} 01`);
+        }
+        const computedPEC = calculatePEC(rx.slice(0, 4));
+        if (computedPEC !== rx[4]) {
+            throw new Error(`ACK PEC 錯誤：計算 0x${computedPEC.toString(16).toUpperCase().padStart(2,'0')}，接收 0x${rx[4].toString(16).toUpperCase().padStart(2,'0')}`);
+        }
+        if (rx[3] !== 0x00) throw new Error(`MCU 回傳 FAIL 狀態 [${rx[3].toString(16).toUpperCase().padStart(2,'0')}]`);
+    }
+
+    async function executeOnlineAdjustCommand(name, packet, flashRelated = false) {
+        if (!onlineAdjustAuthorized) throw new Error('頁面尚未授權');
+        if (!port || !writer) throw new Error('序列埠未連線');
+
+        const status = document.getElementById('onlineAdjustStatus');
+        const maxRetries = 25;
+        const retryGapMs = flashRelated ? 900 : 180;
+        const timeoutMs = flashRelated ? 3500 : 1200;
+        const expectedGroup = packet[1];
+
+        setOnlineAdjustButtonsEnabled(false);
+        status.innerText = `${name} 執行中...`;
+        status.style.color = 'var(--primary-blue)';
+
+        let lastErr = null;
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                log(`[在線調整] ${name}，第 ${attempt} / ${maxRetries} 次嘗試`);
+                const rx = await sendAndAwaitCustomResponse(packet, 0x60, timeoutMs, 5);
+                log(`接收 (RX): ${bytesToHexStr(rx)}`, 'rx');
+                validateOnlineAdjustAck(rx, expectedGroup);
+                status.innerText = `${name} 成功。`;
+                status.style.color = 'var(--success-green)';
+                log(`🎉 ${name} 成功，ACK 狀態與 PEC 驗證符合。`);
+                setOnlineAdjustButtonsEnabled(true);
+                return true;
+            } catch (err) {
+                lastErr = err;
+                log(`❌ ${name} 第 ${attempt} 次失敗: ${err.message}`, 'err');
+                if (attempt < maxRetries) await delayMs(retryGapMs);
+            }
+        }
+
+        status.innerText = `${name} 失敗，已達最大重試次數。`;
+        status.style.color = 'var(--danger-red)';
+        setOnlineAdjustButtonsEnabled(true);
+        alert(`${name} 失敗：${lastErr ? lastErr.message : '未知錯誤'}`);
+        return false;
+    }
+
+    async function sendOnlineFixedCommand(name, bytesWithoutPEC, flashRelated = false) {
+        try {
+            const packet = buildPacketWithPEC(bytesWithoutPEC);
+            await executeOnlineAdjustCommand(name, packet, flashRelated);
+        } catch (err) {
+            alert(err.message);
+            log(`❌ ${name}: ${err.message}`, 'err');
+        }
+    }
+
+    async function sendScaledAdjust(name, inputId, scale, prefix, insertIndex) {
+        try {
+            const v = parseNonNegativeScaledUInt16(inputId, scale);
+            const body = prefix.slice();
+            body.splice(insertIndex, 0, v.lo, v.hi);
+            const packet = buildPacketWithPEC(body);
+            log(`[在線調整] ${name}: input=${v.value}, scaled=${v.scaled}, LSB=${v.lo.toString(16).toUpperCase().padStart(2,'0')} ${v.hi.toString(16).toUpperCase().padStart(2,'0')}`);
+            await executeOnlineAdjustCommand(name, packet, false);
+        } catch (err) {
+            alert(err.message);
+            log(`❌ ${name}: ${err.message}`, 'err');
+        }
+    }
+
+    async function sendLoopGainAdjust(name, inputId, selector, signCode) {
+        try {
+            const v = parseNonNegativeScaledUInt16(inputId, 100000);
+            const packet = buildPacketWithPEC([0x60, 0xF2, 0x04, selector, signCode, v.lo, v.hi]);
+            log(`[在線調整] ${name}: input=${v.value}, scaled=${v.scaled}, LSB=${v.lo.toString(16).toUpperCase().padStart(2,'0')} ${v.hi.toString(16).toUpperCase().padStart(2,'0')}`);
+            await executeOnlineAdjustCommand(name, packet, false);
+        } catch (err) {
+            alert(err.message);
+            log(`❌ ${name}: ${err.message}`, 'err');
+        }
+    }
 
 
     // --- 全局共用主題切換功能 ---
