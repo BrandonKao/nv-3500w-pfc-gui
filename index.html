@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>PFC 綜合除錯與監控工作台 Pro v6.3</title>
+    <title>PFC 綜合除錯與監控工作台 Pro v6.7</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
@@ -97,7 +97,14 @@
         table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 13px; }
         th { background: var(--table-header); color: white; padding: 8px; position: sticky; top: 0; }
         td { padding: 10px; text-align: center; border: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-main); }
-        .val-highlight { font-family: 'Consolas', monospace; font-size: 1.2em; font-weight: bold; color: var(--primary-blue); }
+        .val-highlight { font-family: 'Consolas', monospace; font-size: 1.2em; font-weight: bold; color: var(--primary-blue); font-variant-numeric: tabular-nums; }
+        .monitor-table-wrap { width: 100%; overflow-x: auto; }
+        .monitor-table { table-layout: fixed; width: 100%; min-width: 980px; }
+        .monitor-table th, .monitor-table td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-sizing: border-box; }
+        /* Pin/Pout keep table-cell display to avoid breaking the table layout.
+           table-layout: fixed + percentage colgroup keeps columns responsive,
+           tabular-nums keeps digit width stable during fast value changes. */
+        #val-pin, #val-pout { text-align: center; padding-left: 8px; padding-right: 8px; font-variant-numeric: tabular-nums; }
 
         /* 監控圖表排版 */
         .chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(450px, 1fr)); gap: 15px; margin-bottom: 20px; }
@@ -295,19 +302,34 @@
                     <div style="margin-left: auto;">Window: <input type="number" id="timeWindow" value="5" min="1" style="width: 45px; background: var(--bg-body); color: var(--text-main); border: 1px solid var(--border-color); text-align: center;"> sec</div>
                 </div>
 
-                <table>
-                    <thead>
-                        <tr><th>系統狀態機 (SM)</th><th>Vac (V)</th><th>Iac (A)</th><th>Freq (Hz)</th><th>Pin (W)</th><th>Vbus (V)</th><th>Pout (W)</th><th>PFC Temp</th><th>LLC Temp</th><th>AMB Temp</th><th>FW</th></tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td><span id="val-sm" style="color:#6f42c1; font-weight:bold;">--</span></td>
-                            <td id="val-vac" class="val-highlight">--</td><td id="val-iac" class="val-highlight">--</td><td id="val-freq" class="val-highlight">--</td>
-                            <td id="val-pin" class="val-highlight">--</td><td id="val-vbus" class="val-highlight">--</td><td id="val-pout" class="val-highlight">--</td>
-                            <td id="val-tpfc" class="val-highlight">--</td><td id="val-tllc" class="val-highlight">--</td><td id="val-tamb" class="val-highlight">--</td><td id="val-fw">--</td>
-                        </tr>
-                    </tbody>
-                </table>
+                <div class="monitor-table-wrap">
+                    <table class="monitor-table">
+                        <colgroup>
+                            <col style="width: 13%;">
+                            <col style="width: 8%;">
+                            <col style="width: 8%;">
+                            <col style="width: 9%;">
+                            <col style="width: 9%;">
+                            <col style="width: 9%;">
+                            <col style="width: 9%;">
+                            <col style="width: 8%;">
+                            <col style="width: 8%;">
+                            <col style="width: 8%;">
+                            <col style="width: 11%;">
+                        </colgroup>
+                        <thead>
+                            <tr><th>系統狀態機 (SM)</th><th>Vac (V)</th><th>Iac (A)</th><th>Freq (Hz)</th><th>Pin (W)</th><th>Vbus (V)</th><th>Pout (W)</th><th>PFC Temp</th><th>LLC Temp</th><th>AMB Temp</th><th>FW</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><span id="val-sm" style="color:#6f42c1; font-weight:bold;">--</span></td>
+                                <td id="val-vac" class="val-highlight">--</td><td id="val-iac" class="val-highlight">--</td><td id="val-freq" class="val-highlight">--</td>
+                                <td id="val-pin" class="val-highlight">--</td><td id="val-vbus" class="val-highlight">--</td><td id="val-pout" class="val-highlight">--</td>
+                                <td id="val-tpfc" class="val-highlight">--</td><td id="val-tllc" class="val-highlight">--</td><td id="val-tamb" class="val-highlight">--</td><td id="val-fw">--</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
 
                 <div class="chart-grid">
                     <div class="chart-container"><canvas id="chart-vbus"></canvas></div>
@@ -703,7 +725,8 @@
     const DACCommandData = [
         { name: "CMD_PFC_CurRef", desc: "輸入電流目標值, Iref" }, { name: "CMD_PFC_CurRefA", desc: "輸入電壓相位, Vac(t)" }, { name: "CMD_PFC_CurRefB", desc: "電壓環輸出量, Veao" }, { name: "CMD_PFC_CurRefC", desc: "輸入電壓有效值平方倒數, 1/Vac_rms^2" }, { name: "CMD_PFC_CurRefD", desc: "電壓環輸出量_10Hz LPF" }, { name: "CMD_PFC_CurRefE", desc: "電壓環輸出量_50Hz LPF" }, { name: "CMD_PFC_CurRefF", desc: "輸出功率前饋, Pffd" }, { name: "CMD_PFC_CurRefG", desc: "輸出功率前饋_0.5Hz LPF, Pffd_0.5Hz" }, { name: "CMD_PFC_VbusRef", desc: "輸出電壓目標值, Vref" }, { name: "CMD_PFC_IlDuty", desc: "電流環輸出量, Duty_Iref" }, { name: "CMD_PFC_CCMFfd", desc: "CCM模式輸入電壓前饋量, Duty_ffd_ccm" }, { name: "CMD_PFC_DCMFfd", desc: "DCM模式輸入電壓前饋量, Duty_ffd_dcm" }, { name: "CMD_PFC_Duty", desc: "PFC總輸出duty, Duty = Duty_ffd_ccm + Duty_Iref" }, { name: "CMD_PFC_Freq", desc: "PFC主開關頻率, fs" },
         { name: "CMD_VBUS_raw", desc: "VBUS ADC值, Vbus_adc" }, { name: "CMD_IL_A_raw", desc: "ILA ADC值, Vila_adc" }, { name: "CMD_IL_B_raw", desc: "ILB ADC值, Vilb_adc" }, { name: "CMD_VAC_L_raw", desc: "VLB- ADC值, Vlb-_adc" }, { name: "CMD_VAC_N_raw", desc: "VNB- ADC值, Vnb-_adc" }, { name: "CMD_VBUS_lp_flt", desc: "VBUS 1.444kHz LPF ADC值, Vbus_1444Hz_adc" }, { name: "CMD_VBUS_nc_flt", desc: "VBUS NOTCH LPF ADC值, Vbus_notch_adc" }, { name: "CMD_VAC_abs_flt", desc: "|VAC| ADC值, |Vac|" }, { name: "CMD_VAC_pk_flt", desc: "VAC PEAK ADC值, Vac_peak_adc" },
-        { name: "CMD_StateMachine_PFC", desc: "系統狀態機, State Machine" }, { name: "CMD_AC_ZERO_CROSSING_STATE", desc: "VAC零交越狀態, Vac_zero" }
+        { name: "CMD_StateMachine_PFC", desc: "系統狀態機, State Machine" }, { name: "CMD_AC_ZERO_CROSSING_STATE", desc: "VAC零交越狀態, Vac_zero" },
+        { name: "CMD_ECAP_Freq", desc: "ECAP輸入捕獲頻率, ECAP_freq" }, { name: "CMD_ECAP_Duty", desc: "ECAP輸入捕獲占空比, ECAP_duty" }
     ];
 
     // --- 全局變數 ---
