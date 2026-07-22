@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>PFC 綜合除錯與監控工作台 Pro v6.7</title>
+    <title>PFC 綜合除錯與監控工作台 Pro v6.8</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
@@ -51,7 +51,7 @@
         body { font-family: 'Segoe UI', -apple-system, sans-serif; margin: 0; padding: 0; background-color: var(--bg-body); color: var(--text-main); transition: 0.2s; display: flex; height: 100vh; overflow: hidden; }
         
         /* 側邊導覽列 */
-        .sidebar { width: 240px; background: var(--bg-sidebar); color: var(--sidebar-text); display: flex; flex-direction: column; transition: 0.2s; z-index: 100; }
+        .sidebar { width: 240px; min-width: 240px; flex: 0 0 240px; background: var(--bg-sidebar); color: var(--sidebar-text); display: flex; flex-direction: column; transition: 0.2s; z-index: 100; }
         .sidebar-brand { padding: 20px; font-size: 18px; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.1); }
         .sidebar-menu { list-style: none; padding: 0; margin: 0; flex-grow: 1; }
         .sidebar-item { padding: 15px 20px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: 0.2s; font-weight: 500; }
@@ -61,7 +61,7 @@
         .sidebar-item.disabled:hover { background: #6c757d !important; }
         
         /* 主工作區架構改為彈性垂直排列，容納底部Console */
-        .main-content { flex-grow: 1; display: flex; flex-direction: column; height: 100vh; overflow: hidden; position: relative; }
+        .main-content { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; position: relative; }
         
         /* 頂部共用工具列 */
         .global-top-bar { display: flex; align-items: center; justify-content: space-between; padding: 15px 25px; background: var(--bg-container); border-bottom: 1px solid var(--border-color); box-shadow: 0 2px 5px rgba(0,0,0,0.05); flex-shrink: 0; }
@@ -74,7 +74,7 @@
         .led-offline { background: #e74c3c; box-shadow: 0 0 10px #e74c3c; }
         
         /* 頁面分頁容器 */
-        .page-body { flex-grow: 1; padding: 20px; overflow-y: auto; }
+        .page-body { flex: 1 1 auto; min-width: 0; padding: 20px; overflow-y: auto; overflow-x: hidden; }
         .page-content { display: none; max-width: 1600px; margin: auto; }
         .page-content.active { display: block; }
 
@@ -256,10 +256,11 @@
         }
 
         /* 全局底部共用主控台 (Console) */
-        .global-console-panel { height: 200px; background-color: var(--log-bg); color: var(--log-text); border-top: 2px solid var(--border-color); display: flex; flex-direction: column; flex-shrink: 0; transition: 0.2s; z-index: 101;}
-        .console-header { padding: 6px 15px; background: rgba(0, 0, 0, 0.2); font-size: 12px; font-weight: bold; color: var(--sidebar-text); display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); }
-        #log { flex-grow: 1; padding: 10px 15px; overflow-y: auto; font-family: 'Courier New', Courier, monospace; font-size: 13px; line-height: 1.4; }
+        .global-console-panel { height: 200px; flex: 0 0 200px; min-width: 0; max-width: 100%; overflow: hidden; background-color: var(--log-bg); color: var(--log-text); border-top: 2px solid var(--border-color); display: flex; flex-direction: column; transition: 0.2s; z-index: 101;}
+        .console-header { padding: 6px 15px; background: rgba(0, 0, 0, 0.2); font-size: 12px; font-weight: bold; color: var(--sidebar-text); display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); flex-shrink: 0; }
+        #log { flex: 1 1 auto; min-width: 0; min-height: 0; padding: 10px 15px; overflow: auto; font-family: 'Courier New', Courier, monospace; font-size: 13px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; box-sizing: border-box; }
         .enum-name { font-family: monospace; color: #c7254e; background-color: rgba(199,37,78,0.1); padding: 2px 4px; border-radius: 4px; font-size: 12px; }
+            /* v6.8: Console long logs no longer shrink sidebar; log wraps/scrolls inside panel. */
     </style>
 </head>
 <body data-theme="light">
