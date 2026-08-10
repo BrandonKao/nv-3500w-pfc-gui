@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>PFC 綜合除錯與監控工作台 Pro v6.8</title>
+    <title>PFC 綜合除錯與監控工作台 Pro v6.9</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
@@ -437,6 +437,15 @@
                             <div class="read-row"><span class="read-label">High Line VBUS (2% / 10%):</span><span><span class="read-val" id="rc_hv_2">--</span> / <span class="read-val" id="rc_hv_10">--</span> V</span></div>
                             <div class="read-row"><span class="read-label">High Line VBUS (50% / 100%):</span><span><span class="read-val" id="rc_hv_50">--</span> / <span class="read-val" id="rc_hv_100">--</span> V</span></div>
                             <div class="read-row"><span class="read-label">XCAP 補償增益 (Low / High):</span><span><span class="read-val" id="rc_xc_l">--</span> / <span class="read-val" id="rc_xc_h">--</span> A</span></div>
+                        </div>
+
+                        <div class="read-item">
+                            <h3 style="margin-top: 0; color: var(--primary-blue); border-bottom: 1px solid var(--border-color); padding-bottom:5px;">輸出 BUS 電壓校正點 (vbus_point)</h3>
+                            <div class="read-row"><span class="read-label">380V 計算值 / 真實值:</span><span><span class="read-val" id="rc_vbus380_c">--</span> / <span class="read-val" id="rc_vbus380_r">--</span> V</span></div>
+                            <div class="read-row"><span class="read-label">395V 計算值 / 真實值:</span><span><span class="read-val" id="rc_vbus395_c">--</span> / <span class="read-val" id="rc_vbus395_r">--</span> V</span></div>
+                            <div class="read-row"><span class="read-label">410V 計算值 / 真實值:</span><span><span class="read-val" id="rc_vbus410_c">--</span> / <span class="read-val" id="rc_vbus410_r">--</span> V</span></div>
+                            <div class="read-row"><span class="read-label">425V 計算值 / 真實值:</span><span><span class="read-val" id="rc_vbus425_c">--</span> / <span class="read-val" id="rc_vbus425_r">--</span> V</span></div>
+                            <div class="read-row"><span class="read-label">440V 計算值 / 真實值:</span><span><span class="read-val" id="rc_vbus440_c">--</span> / <span class="read-val" id="rc_vbus440_r">--</span> V</span></div>
                         </div>
                     </div>
                 </div>
@@ -1272,21 +1281,24 @@
         statusText.innerText = "正在執行校正數據讀取與校驗流程...";
         statusText.style.color = "var(--primary-blue)";
 
-        const readPacket = [0x61, 0xEF, 0xC1, 0x67];
+        const readPacket = [0x61, 0xEF, 0xE9, 0xBF];
 
         // 封包格式：
         // [0..3]   = Header / Cmd / Len / Status
-        // [4..195] = 校正資料結構體 payload，共 192 bytes
-        // [196]    = PEC
+        // [0..2]   = Header / Cmd / Len，Len = Status + Payload bytes
+        // [3]      = Status，0x00 表示讀取成功
+        // [4..235] = 校正資料結構體 payload，共 232 bytes
+        // [236]    = PEC
         //
-        // 原本設成 191 會把 caliKey 的低位元 0xAA 誤判成 PEC，
-        // 因此會固定出現「計算得 0x49，接收到 0xAA」。
+        // UART TX: 61 EF E9 BF
+        // UART RX: 61 EF E9 STATUS [PFCCalibrationDataBuff_t] PEC
         const CAL_SYS_INFO_LEN = 66;     // 16*4 ASCII + uint16 ratePower
         const CAL_INPUT_VOLT_LEN = 40;   // 10 * float32
         const CAL_INPUT_CURR_LEN = 40;   // 10 * float32
         const CAL_LOW_VBUS_LEN = 16;     // 4 * float32
         const CAL_HIGH_VBUS_LEN = 16;    // 4 * float32
         const CAL_XCAP_LEN = 8;          // 2 * float32
+        const CAL_VBUS_POINT_LEN = 40;   // 10 * float32
         const CAL_INFO_LEN = 6;          // uint16 key + uint16 dataLen + uint16 crc
         const targetResponseLen = 4
             + CAL_SYS_INFO_LEN
@@ -1295,6 +1307,7 @@
             + CAL_LOW_VBUS_LEN
             + CAL_HIGH_VBUS_LEN
             + CAL_XCAP_LEN
+            + CAL_VBUS_POINT_LEN
             + CAL_INFO_LEN
             + 1; // PEC
 
@@ -1386,8 +1399,21 @@
                 const xcLow  = parseFloat32LE(rx, offsetXC + 0).toFixed(3);
                 const xcHigh = parseFloat32LE(rx, offsetXC + 4).toFixed(3);
 
-                // G. cali_info_t 解析
-                const offsetInfo = offsetXC + 8;
+                // G. vbus_point_t 解析
+                const offsetVBUSPoint = offsetXC + 8;
+                const calcVbus380 = parseFloat32LE(rx, offsetVBUSPoint + 0).toFixed(1);
+                const realVbus380 = parseFloat32LE(rx, offsetVBUSPoint + 4).toFixed(1);
+                const calcVbus395 = parseFloat32LE(rx, offsetVBUSPoint + 8).toFixed(1);
+                const realVbus395 = parseFloat32LE(rx, offsetVBUSPoint + 12).toFixed(1);
+                const calcVbus410 = parseFloat32LE(rx, offsetVBUSPoint + 16).toFixed(1);
+                const realVbus410 = parseFloat32LE(rx, offsetVBUSPoint + 20).toFixed(1);
+                const calcVbus425 = parseFloat32LE(rx, offsetVBUSPoint + 24).toFixed(1);
+                const realVbus425 = parseFloat32LE(rx, offsetVBUSPoint + 28).toFixed(1);
+                const calcVbus440 = parseFloat32LE(rx, offsetVBUSPoint + 32).toFixed(1);
+                const realVbus440 = parseFloat32LE(rx, offsetVBUSPoint + 36).toFixed(1);
+
+                // H. cali_info_t 解析
+                const offsetInfo = offsetVBUSPoint + 40;
                 const caliKey    = getUintValueLE(rx, offsetInfo + 0, 2);
                 const dataLength = getUintValueLE(rx, offsetInfo + 2, 2);
                 const crcData    = getUintValueLE(rx, offsetInfo + 4, 2);
@@ -1416,6 +1442,12 @@
                 document.getElementById('rc_hv_2').innerText = hv2;   document.getElementById('rc_hv_10').innerText = hv10;
                 document.getElementById('rc_hv_50').innerText = hv50; document.getElementById('rc_hv_100').innerText = hv100;
                 document.getElementById('rc_xc_l').innerText = xcLow; document.getElementById('rc_xc_h').innerText = xcHigh;
+
+                document.getElementById('rc_vbus380_c').innerText = calcVbus380; document.getElementById('rc_vbus380_r').innerText = realVbus380;
+                document.getElementById('rc_vbus395_c').innerText = calcVbus395; document.getElementById('rc_vbus395_r').innerText = realVbus395;
+                document.getElementById('rc_vbus410_c').innerText = calcVbus410; document.getElementById('rc_vbus410_r').innerText = realVbus410;
+                document.getElementById('rc_vbus425_c').innerText = calcVbus425; document.getElementById('rc_vbus425_r').innerText = realVbus425;
+                document.getElementById('rc_vbus440_c').innerText = calcVbus440; document.getElementById('rc_vbus440_r').innerText = realVbus440;
 
                 const hexKeyStr = '0x' + caliKey.toString(16).toUpperCase();
                 document.getElementById('rc_key').innerText = hexKeyStr;
