@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>PFC 綜合除錯與監控工作台 Pro v6.9</title>
+    <title>PFC 綜合除錯與監控工作台 Pro v7.0</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
@@ -446,6 +446,14 @@
                             <div class="read-row"><span class="read-label">410V 計算值 / 真實值:</span><span><span class="read-val" id="rc_vbus410_c">--</span> / <span class="read-val" id="rc_vbus410_r">--</span> V</span></div>
                             <div class="read-row"><span class="read-label">425V 計算值 / 真實值:</span><span><span class="read-val" id="rc_vbus425_c">--</span> / <span class="read-val" id="rc_vbus425_r">--</span> V</span></div>
                             <div class="read-row"><span class="read-label">440V 計算值 / 真實值:</span><span><span class="read-val" id="rc_vbus440_c">--</span> / <span class="read-val" id="rc_vbus440_r">--</span> V</span></div>
+                        </div>
+
+                        <div class="read-item">
+                            <h3 style="margin-top: 0; color: var(--primary-blue); border-bottom: 1px solid var(--border-color); padding-bottom:5px;">VBUS SOC 曲線偏移校正 (vbus_soc)</h3>
+                            <div class="read-row"><span class="read-label">VBUS Max:</span><span><span class="read-val" id="rc_soc_vbus_max">--</span> V</span></div>
+                            <div class="read-row"><span class="read-label">VBUS Min:</span><span><span class="read-val" id="rc_soc_vbus_min">--</span> V</span></div>
+                            <div class="read-row"><span class="read-label">Duty Max:</span><span><span class="read-val" id="rc_soc_duty_max">--</span></span></div>
+                            <div class="read-row"><span class="read-label">Duty Min:</span><span><span class="read-val" id="rc_soc_duty_min">--</span></span></div>
                         </div>
                     </div>
                 </div>
@@ -1281,17 +1289,17 @@
         statusText.innerText = "正在執行校正數據讀取與校驗流程...";
         statusText.style.color = "var(--primary-blue)";
 
-        const readPacket = [0x61, 0xEF, 0xE9, 0xBF];
+        const readPacket = [0x61, 0xEF, 0xF9, 0xCF];
 
         // 封包格式：
         // [0..3]   = Header / Cmd / Len / Status
         // [0..2]   = Header / Cmd / Len，Len = Status + Payload bytes
         // [3]      = Status，0x00 表示讀取成功
-        // [4..235] = 校正資料結構體 payload，共 232 bytes
-        // [236]    = PEC
+        // [4..251] = 校正資料結構體 payload，共 248 bytes
+        // [252]    = PEC
         //
-        // UART TX: 61 EF E9 BF
-        // UART RX: 61 EF E9 STATUS [PFCCalibrationDataBuff_t] PEC
+        // UART TX: 61 EF F9 CF
+        // UART RX: 61 EF F9 STATUS [PFCCalibrationDataBuff_t] PEC
         const CAL_SYS_INFO_LEN = 66;     // 16*4 ASCII + uint16 ratePower
         const CAL_INPUT_VOLT_LEN = 40;   // 10 * float32
         const CAL_INPUT_CURR_LEN = 40;   // 10 * float32
@@ -1299,6 +1307,7 @@
         const CAL_HIGH_VBUS_LEN = 16;    // 4 * float32
         const CAL_XCAP_LEN = 8;          // 2 * float32
         const CAL_VBUS_POINT_LEN = 40;   // 10 * float32
+        const CAL_VBUS_SOC_LEN = 16;     // 4 * float32
         const CAL_INFO_LEN = 6;          // uint16 key + uint16 dataLen + uint16 crc
         const targetResponseLen = 4
             + CAL_SYS_INFO_LEN
@@ -1308,6 +1317,7 @@
             + CAL_HIGH_VBUS_LEN
             + CAL_XCAP_LEN
             + CAL_VBUS_POINT_LEN
+            + CAL_VBUS_SOC_LEN
             + CAL_INFO_LEN
             + 1; // PEC
 
@@ -1412,8 +1422,15 @@
                 const calcVbus440 = parseFloat32LE(rx, offsetVBUSPoint + 32).toFixed(1);
                 const realVbus440 = parseFloat32LE(rx, offsetVBUSPoint + 36).toFixed(1);
 
-                // H. cali_info_t 解析
-                const offsetInfo = offsetVBUSPoint + 40;
+                // H. vbus_soc_t 解析
+                const offsetVBUSSOC = offsetVBUSPoint + 40;
+                const socVbusMax  = parseFloat32LE(rx, offsetVBUSSOC + 0).toFixed(1);
+                const socVbusMin  = parseFloat32LE(rx, offsetVBUSSOC + 4).toFixed(1);
+                const socDutyMax  = parseFloat32LE(rx, offsetVBUSSOC + 8).toFixed(4);
+                const socDutyMin  = parseFloat32LE(rx, offsetVBUSSOC + 12).toFixed(4);
+
+                // I. cali_info_t 解析
+                const offsetInfo = offsetVBUSSOC + 16;
                 const caliKey    = getUintValueLE(rx, offsetInfo + 0, 2);
                 const dataLength = getUintValueLE(rx, offsetInfo + 2, 2);
                 const crcData    = getUintValueLE(rx, offsetInfo + 4, 2);
@@ -1448,6 +1465,11 @@
                 document.getElementById('rc_vbus410_c').innerText = calcVbus410; document.getElementById('rc_vbus410_r').innerText = realVbus410;
                 document.getElementById('rc_vbus425_c').innerText = calcVbus425; document.getElementById('rc_vbus425_r').innerText = realVbus425;
                 document.getElementById('rc_vbus440_c').innerText = calcVbus440; document.getElementById('rc_vbus440_r').innerText = realVbus440;
+
+                document.getElementById('rc_soc_vbus_max').innerText = socVbusMax;
+                document.getElementById('rc_soc_vbus_min').innerText = socVbusMin;
+                document.getElementById('rc_soc_duty_max').innerText = socDutyMax;
+                document.getElementById('rc_soc_duty_min').innerText = socDutyMin;
 
                 const hexKeyStr = '0x' + caliKey.toString(16).toUpperCase();
                 document.getElementById('rc_key').innerText = hexKeyStr;
