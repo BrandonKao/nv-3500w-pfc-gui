@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>PFC 綜合除錯與監控工作台 Pro v7.0</title>
+    <title>PFC 綜合除錯與監控工作台 Pro v7.1</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
@@ -401,7 +401,7 @@
                             <div class="read-row"><span class="read-label">模組型號:</span><span class="read-val" id="rc_mod">--</span></div>
                             <div class="read-row"><span class="read-label">生產日期:</span><span class="read-val" id="rc_date">--</span></div>
                             <div class="read-row"><span class="read-label">產品序號:</span><span class="read-val" id="rc_sn">--</span></div>
-                            <div class="read-row"><span class="read-label">額定功率:</span><span class="read-val" id="rc_power">-- W</span></div>
+                            <div class="read-row"><span class="read-label">額定功率(H/L):</span><span class="read-val" id="rc_power">-- / -- W</span></div>
                         </div>
 
                         <div class="read-item">
@@ -1289,18 +1289,18 @@
         statusText.innerText = "正在執行校正數據讀取與校驗流程...";
         statusText.style.color = "var(--primary-blue)";
 
-        const readPacket = [0x61, 0xEF, 0xF9, 0xCF];
+        const readPacket = [0x61, 0xEF, 0xFB, 0xC1];
 
         // 封包格式：
         // [0..3]   = Header / Cmd / Len / Status
         // [0..2]   = Header / Cmd / Len，Len = Status + Payload bytes
         // [3]      = Status，0x00 表示讀取成功
-        // [4..251] = 校正資料結構體 payload，共 248 bytes
-        // [252]    = PEC
+        // [4..253] = 校正資料結構體 payload，共 250 bytes
+        // [254]    = PEC
         //
-        // UART TX: 61 EF F9 CF
-        // UART RX: 61 EF F9 STATUS [PFCCalibrationDataBuff_t] PEC
-        const CAL_SYS_INFO_LEN = 66;     // 16*4 ASCII + uint16 ratePower
+        // UART TX: 61 EF FB C1
+        // UART RX: 61 EF FB STATUS [PFCCalibrationDataBuff_t] PEC
+        const CAL_SYS_INFO_LEN = 68;     // 16*4 ASCII + uint16 ratePowerHigh + uint16 ratePowerLow
         const CAL_INPUT_VOLT_LEN = 40;   // 10 * float32
         const CAL_INPUT_CURR_LEN = 40;   // 10 * float32
         const CAL_LOW_VBUS_LEN = 16;     // 4 * float32
@@ -1362,10 +1362,11 @@
                 const moduleName    = parseAsciiString(rx, p + 16, 16);
                 const productDate   = parseAsciiString(rx, p + 32, 16);
                 const serialNumber  = parseAsciiString(rx, p + 48, 16);
-                const ratePower     = getUintValueLE(rx, p + 64, 2);
+                const ratePowerHigh = getUintValueLE(rx, p + 64, 2);
+                const ratePowerLow  = getUintValueLE(rx, p + 66, 2);
 
                 // B. input_voltage_t 解析
-                const offsetV = p + 66;
+                const offsetV = p + 68;
                 const calc0V   = parseFloat32LE(rx, offsetV + 0).toFixed(1);
                 const real0V   = parseFloat32LE(rx, offsetV + 4).toFixed(1);
                 const calc90V  = parseFloat32LE(rx, offsetV + 8).toFixed(1);
@@ -1440,7 +1441,7 @@
                 document.getElementById('rc_mod').innerText = moduleName || "--";
                 document.getElementById('rc_date').innerText = productDate || "--";
                 document.getElementById('rc_sn').innerText = serialNumber || "--";
-                document.getElementById('rc_power').innerText = `${ratePower} W`;
+                document.getElementById('rc_power').innerText = `${ratePowerHigh} / ${ratePowerLow} W`;
 
                 document.getElementById('rc_v0_c').innerText = calc0V;   document.getElementById('rc_v0_r').innerText = real0V;
                 document.getElementById('rc_v90_c').innerText = calc90V; document.getElementById('rc_v90_r').innerText = real90V;
